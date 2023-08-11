@@ -36,6 +36,7 @@ winapi = { version = "0.3.9", features = ["shellapi", "winuser"] }
 # winsafe = { version = "0.0.14", features = ["shell", "user"] }
 
 [package.metadata.winres]
-OriginalFilename = "ICED_EXAMPLE.EXE"
-FileDescription = "A OpenRTX Tool to for radio stuff. https://github.com/xxx- GPLv2"
-Comments = "This software is licensed under GPLv2. You can obtain the source code here: https://github.com/xxx"
+OriginalFilename = "opnrtx-companion.exe"
+FileDescription = "An OpenRTX Companion for radio modification. https://github.com/OpenRTX/OpenRTX-Companion - GPLv3"
+Comments = "This software is licensed under GPLv3. You can obtain the source code here: https://github.com/OpenRTX/OpenRTX-Companion"
+LegalCopyright = "Copyright © 2023 - OpenRTX Project"
