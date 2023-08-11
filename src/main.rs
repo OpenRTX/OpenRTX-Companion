@@ -1,16 +1,17 @@
 // show logs when debugging
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use iced::{executor, Padding};
+use iced::{executor, Padding, theme, Color};
 use iced::{Application, Command, Length, Alignment, 
     Element, Settings, Theme, Subscription};
 use iced::window::icon::from_rgba;
 use iced::window::{Icon, Settings as Window};
 use iced::widget::{Container, /* Text, */ progress_bar, /* slider, */ 
-    radio, button, column, row, text, /* vertical_rule */};
+    radio, button, column, row, text, horizontal_space, /* vertical_rule */};
 use iced_aw::{split, Split};
 use image::{self, GenericImageView};
 use tracing::debug;
+use rfd::AsyncFileDialog;
 
 fn icon() -> Icon {
     let image = image::load_from_memory(include_bytes!("../res/img/logo/icon.png")).unwrap();
@@ -50,7 +51,7 @@ struct App {
     flashing: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Message {
     IncrementPressed,
     DecrementPressed,
@@ -59,13 +60,27 @@ pub enum Message {
     LanguageSelected(RadioHW),
     Tick,
     FlashPressed,
+    OpenFWPressed,
+    OpenFile(Option<String>),
 }
+
 
 impl Application for App {
     type Executor = executor::Default;
     type Flags = ();
     type Message = Message;
     type Theme = Theme;
+
+    fn theme(&self) -> Self::Theme {
+        //Theme::Dark
+        Theme::custom(theme::Palette {
+            background: Color::from_rgb(0.4, 0.4, 0.4),
+            text: Color::BLACK,
+            primary: Color::from_rgb(0.8, 0.8, 0.8),
+            success: Color::from_rgb(0.0, 1.0, 0.0),
+            danger: Color::from_rgb(1.0, 0.0, 0.0),
+        })
+    }
 
     fn new(_flags: ()) -> (App, Command<Self::Message>) {
         (
@@ -113,6 +128,28 @@ fn update(&mut self, message: Message) -> Command<Self::Message> {
             self.flashing = true;
             debug!("flash");
         },
+        Message::OpenFWPressed => {
+            return Command::perform(
+                async {
+                    let file = AsyncFileDialog::new()
+                    .pick_file()
+                    .await;
+                    if let Some(file) = file {
+                        Some(format!(
+                            "file:///{}",
+                            file.path().to_str().unwrap().to_string()
+                        ))
+                    } else {
+                        None
+                    }
+                }, 
+                move |f| Message::OpenFile(f)
+            );
+            
+        },     
+        Message::OpenFile(f) => {
+            debug!(f);
+        }   
     }
     Command::none()
 }
@@ -190,7 +227,12 @@ fn view(&self) -> Element<Message> {
             ],
             column![
                 progress_bar(0.0..=100.0, self.progress),
-                button("Flash Radio").on_press(Message::FlashPressed),
+                row![
+                    button("Open FW File").on_press(Message::OpenFWPressed),
+                    horizontal_space(10),
+                    button("Flash Radio").on_press(Message::FlashPressed),
+                ].padding(15)
+                
             ]
             .padding(Padding::from([40, 0, 0, 0]))
             .align_items(Alignment::Center)
