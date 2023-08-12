@@ -14,6 +14,7 @@ use iced_aw::{split, Split};
 use image::{self, GenericImageView};
 use rfd::AsyncFileDialog;
 use tracing::debug;
+use rtxflash::{self, get_devices};
 
 fn icon() -> Icon {
     let image = image::load_from_memory(include_bytes!("../res/img/logo/icon.png")).unwrap();
@@ -25,6 +26,9 @@ fn icon() -> Icon {
 pub fn main() -> iced::Result {
     win_attach_terminal();
     init_logging();
+
+    let devices = get_devices();
+    println!("{:?}", devices);
 
     let settings: Settings<()> = Settings {
         window: Window {
@@ -75,9 +79,11 @@ impl Application for App {
     fn theme(&self) -> Self::Theme {
         //Theme::Dark
         Theme::custom(theme::Palette {
-            background: Color::from_rgb(0.4, 0.4, 0.4),
+            //background: Color::from_rgb(0.4, 0.4, 0.4),
+            background: Color::from_rgb(0.1, 0.1, 0.1),
             text: Color::BLACK,
-            primary: Color::from_rgb(0.8, 0.8, 0.8),
+            //primary: Color::from_rgb(0.8, 0.8, 0.8),
+            primary: Color::from_rgb(0.98, 0.70, 0.07),
             success: Color::from_rgb(0.0, 1.0, 0.0),
             danger: Color::from_rgb(1.0, 0.0, 0.0),
         })
