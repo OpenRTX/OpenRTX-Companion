@@ -5,6 +5,7 @@ use iced::widget::{
     button, column, horizontal_space, /* vertical_rule */
     /* Text, */ progress_bar, /* slider, */
     radio, row, text, Container,
+    combo_box,
 };
 use iced::window::icon::from_rgba;
 use iced::window::{Icon, Settings as Window};
@@ -15,6 +16,7 @@ use image::{self, GenericImageView};
 use rfd::AsyncFileDialog;
 use tracing::debug;
 use rtxflash::{self, get_devices};
+// use rtxlink::{flow, link};
 
 fn icon() -> Icon {
     let image = image::load_from_memory(include_bytes!("../res/img/logo/icon.png")).unwrap();
@@ -55,6 +57,8 @@ struct App {
     ver_divider_position: Option<u16>,
     selection: Option<RadioHW>,
     flashing: bool,
+    available_ports: combo_box::State<SerialPort>,
+    serial_port: Option<SerialPort>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +72,9 @@ pub enum Message {
     FlashPressed,
     OpenFWPressed,
     OpenFile(Option<String>),
+    BackupPressed,
+    StartBackup(Option<String>),
+    PortSelected(SerialPort),
 }
 
 impl Application for App {
@@ -81,7 +88,7 @@ impl Application for App {
         Theme::custom(theme::Palette {
             //background: Color::from_rgb(0.4, 0.4, 0.4),
             background: Color::from_rgb(0.1, 0.1, 0.1),
-            text: Color::BLACK,
+            text: Color::from_rgb(0.8, 0.8, 0.8),
             //primary: Color::from_rgb(0.8, 0.8, 0.8),
             primary: Color::from_rgb(0.98, 0.70, 0.07),
             success: Color::from_rgb(0.0, 1.0, 0.0),
@@ -97,6 +104,8 @@ impl Application for App {
                 ver_divider_position: Some(150),
                 selection: None,
                 flashing: false,
+                available_ports: combo_box::State::new(SerialPort::all().to_vec()),
+                serial_port: None,
             },
             Command::none(),
         )
@@ -151,8 +160,33 @@ impl Application for App {
                     move |f| Message::OpenFile(f),
                 );
             }
-            Message::OpenFile(f) => {
-                debug!(f);
+            Message::OpenFile(file) => {
+                debug!(file);
+            }
+            // Backup functionality needs a folder where to store backups
+            Message::BackupPressed => {
+                return Command::perform(
+                    async {
+                        let file = AsyncFileDialog::new().pick_folder().await;
+                        if let Some(file) = file {
+                            Some(format!(
+                                "file:///{}",
+                                file.path().to_str().unwrap().to_string()
+                            ))
+                        } else {
+                            None
+                        }
+                    },
+                    move |f| Message::StartBackup(f),
+                );
+            }
+            Message::StartBackup(path) => {
+                // TODO: Open link with configured serial port
+                rtxlink::link::Link::new("/dev/pts/6");
+                rtxlink::flow::backup(path);
+            }
+            Message::PortSelected(port) => {
+                println!("Selected port: {port}");
             }
         }
         Command::none()
@@ -183,6 +217,16 @@ impl Application for App {
         .center_x()
         .center_y();
 
+        let combo_box = combo_box(
+            &self.available_ports,
+            "Select a serial port...",
+            self.serial_port.as_ref(),
+            Message::PortSelected,
+        )
+        // .on_option_hovered(Message::OptionHovered)
+        // .on_close(Message::Closed)
+        .width(250);
+
         let second = Container::new(
             //     column![
             //      button("Increment").on_press(Message::IncrementPressed),
@@ -199,16 +243,10 @@ impl Application for App {
                     column![text("0.3.0").size(15),]
                 ],
                 row![
-                    column![text("Device:").size(15),]
+                    column![text("Serial port:").size(15),]
                         .padding(Padding::from([0, 10, 0, 0]))
-                        .width(80),
-                    column![text("/dev/ttyACM0, Fast, not slow, 16MB flash, etc ").size(15),]
-                ],
-                row![
-                    column![text("Notes:").size(15),]
-                        .padding(Padding::from([0, 10, 0, 0]))
-                        .width(80),
-                    column![text("What it is").size(15),]
+                        .width(120),
+                    combo_box,
                 ],
                 column![
                     progress_bar(0.0..=100.0, self.progress),
@@ -216,6 +254,8 @@ impl Application for App {
                         button("Open FW File").on_press(Message::OpenFWPressed),
                         horizontal_space(10),
                         button("Flash Radio").on_press(Message::FlashPressed),
+                        horizontal_space(10),
+                        button("Backup").on_press(Message::BackupPressed),
                     ]
                     .padding(15)
                 ]
@@ -282,28 +322,55 @@ pub enum RadioHW {
     Mduv3x0,
     Twrplus,
     Md3x0,
-    Other,
 }
 
 impl RadioHW {
-    fn all() -> [RadioHW; 4] {
+    fn all() -> [RadioHW; 3] {
         [
             RadioHW::Md3x0,
             RadioHW::Mduv3x0,
             RadioHW::Twrplus,
-            RadioHW::Other,
         ]
     }
 }
 
 impl From<RadioHW> for String {
-    fn from(language: RadioHW) -> String {
-        String::from(match language {
-            RadioHW::Mduv3x0 => "MD-UV390",
-            RadioHW::Twrplus => "TWR-T Plus",
-            RadioHW::Md3x0 => "MD380",
-            RadioHW::Other => "Other",
+    fn from(radio: RadioHW) -> String {
+        String::from(match radio {
+            RadioHW::Md3x0 => "MD3x0",
+            RadioHW::Mduv3x0 => "MD-UV3x0",
+            RadioHW::Twrplus => "T-TWR Plus",
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialPort {
+    COM2,
+    COM3,
+}
+
+impl SerialPort {
+    fn all() -> [SerialPort; 2] {
+        [
+            SerialPort::COM2,
+            SerialPort::COM3,
+        ]
+    }
+}
+
+impl From<SerialPort> for String {
+    fn from(port: SerialPort) -> String {
+        String::from(match port {
+            SerialPort::COM2 => "COM2",
+            SerialPort::COM3 => "COM3",
+        })
+    }
+}
+
+impl std::fmt::Display for SerialPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", String::from(*self))
     }
 }
 

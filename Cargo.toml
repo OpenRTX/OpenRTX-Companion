@@ -37,6 +37,9 @@ tracing-subscriber = "0.3.17"
 # library which currently wraps the radio_tool cxx tool
 rtxflash = { git = "https://github.com/OpenRTX/rtxflash", branch = "main" }
 
+# library to manage the OpenRTX Communication Protocol (rtxlink)
+rtxlink = { git = "https://github.com/OpenRTX/rtxlink", branch = "main" }
+
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["shellapi", "winuser"] }
 # winsafe = { version = "0.0.14", features = ["shell", "user"] }
