@@ -5,7 +5,7 @@ use iced::widget::{
     button, column, horizontal_space, /* vertical_rule */
     /* Text, */ progress_bar, /* slider, */
     radio, row, text, Container,
-    combo_box,
+    combo_box, ComboBox,
 };
 use iced::window::icon::from_rgba;
 use iced::window::{Icon, Settings as Window};
@@ -17,6 +17,45 @@ use rfd::AsyncFileDialog;
 use tracing::debug;
 use rtxflash::{self, get_devices};
 // use rtxlink::{flow, link};
+use serial_enumerator::{get_serial_list};
+
+// Wrapper type for SerialItem to enable trait definition
+#[derive(Clone)]
+pub struct SerialPort {
+    name: String,
+    vendor: String,
+    product: String,
+}
+
+// Display trait for SeriatPortInfo
+impl std::fmt::Display for SerialPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+// Debug trait for SerialPortInfo
+impl std::fmt::Debug for SerialPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SerialPort")
+         .field("name", &self.name)
+         .field("product", &self.product)
+         .field("vendor", &self.vendor)
+         .finish()
+    }
+}
+
+// Unwrap result from serialport library
+fn get_ports() -> Vec<SerialPort> {
+    let ports = get_serial_list();
+    ports.iter().map(|p| {
+        SerialPort{
+            name: p.name.clone(),
+            vendor: p.vendor.clone().unwrap_or(String::from("")),
+            product: p.product.clone().unwrap_or(String::from("")),
+        }
+    }).collect()
+}
 
 fn icon() -> Icon {
     let image = image::load_from_memory(include_bytes!("../res/img/logo/icon.png")).unwrap();
@@ -47,7 +86,7 @@ pub fn main() -> iced::Result {
         ..iced::Settings::default()
     };
 
-    return App::run(settings);
+    App::run(settings)
 }
 
 struct App {
@@ -57,8 +96,9 @@ struct App {
     ver_divider_position: Option<u16>,
     selection: Option<RadioHW>,
     flashing: bool,
-    available_ports: combo_box::State<SerialPort>,
+    serial_ports: Vec<SerialPort>,
     serial_port: Option<SerialPort>,
+    ports_combo_state: combo_box::State<SerialPort>,
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +137,7 @@ impl Application for App {
     }
 
     fn new(_flags: ()) -> (App, Command<Self::Message>) {
+        let ports = get_ports();
         (
             Self {
                 value: 0,
@@ -104,8 +145,9 @@ impl Application for App {
                 ver_divider_position: Some(150),
                 selection: None,
                 flashing: false,
-                available_ports: combo_box::State::new(SerialPort::all().to_vec()),
+                serial_ports: ports.clone(),
                 serial_port: None,
+                ports_combo_state: combo_box::State::new(ports),
             },
             Command::none(),
         )
@@ -143,6 +185,7 @@ impl Application for App {
                 self.progress = 0.0;
                 self.flashing = true;
                 debug!("flash");
+                // TODO: Flashing
             }
             Message::OpenFWPressed => {
                 return Command::perform(
@@ -181,12 +224,16 @@ impl Application for App {
                 );
             }
             Message::StartBackup(path) => {
-                // TODO: Open link with configured serial port
-                rtxlink::link::Link::new("/dev/pts/6");
+                // Open link with configured serial port
+                let port = match &self.serial_port {
+                    Some(p) => p.name.clone(),
+                    None => panic!("No serial port selected!"),
+                };
+                rtxlink::link::Link::new(&port);
                 rtxlink::flow::backup(path);
             }
             Message::PortSelected(port) => {
-                println!("Selected port: {port}");
+                self.serial_port = Some(port);
             }
         }
         Command::none()
@@ -210,15 +257,15 @@ impl Application for App {
                     .map(Element::from)
                     .collect(),
             )
-            .spacing(10),
+            .spacing(10)
         )
         .width(Length::Fill)
         .height(Length::Fill)
         .center_x()
         .center_y();
 
-        let combo_box = combo_box(
-            &self.available_ports,
+        let port_combo_box = combo_box(
+            &self.ports_combo_state,
             "Select a serial port...",
             self.serial_port.as_ref(),
             Message::PortSelected,
@@ -246,7 +293,7 @@ impl Application for App {
                     column![text("Serial port:").size(15),]
                         .padding(Padding::from([0, 10, 0, 0]))
                         .width(120),
-                    combo_box,
+                    port_combo_box,
                 ],
                 column![
                     progress_bar(0.0..=100.0, self.progress),
@@ -341,36 +388,6 @@ impl From<RadioHW> for String {
             RadioHW::Mduv3x0 => "MD-UV3x0",
             RadioHW::Twrplus => "T-TWR Plus",
         })
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SerialPort {
-    COM2,
-    COM3,
-}
-
-impl SerialPort {
-    fn all() -> [SerialPort; 2] {
-        [
-            SerialPort::COM2,
-            SerialPort::COM3,
-        ]
-    }
-}
-
-impl From<SerialPort> for String {
-    fn from(port: SerialPort) -> String {
-        String::from(match port {
-            SerialPort::COM2 => "COM2",
-            SerialPort::COM3 => "COM3",
-        })
-    }
-}
-
-impl std::fmt::Display for SerialPort {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", String::from(*self))
     }
 }
 
