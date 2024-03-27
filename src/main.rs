@@ -5,7 +5,7 @@ use iced::widget::{
     button, column, horizontal_space, /* vertical_rule */
     /* Text, */ progress_bar, /* slider, */
     radio, row, text, Container,
-    combo_box, ComboBox,
+    combo_box,
 };
 use iced::window::icon::from_rgba;
 use iced::window::{Icon, Settings as Window};
@@ -17,7 +17,8 @@ use rfd::AsyncFileDialog;
 use tracing::debug;
 use rtxflash::{self, get_devices};
 // use rtxlink::{flow, link};
-use serial_enumerator::{get_serial_list};
+use serial_enumerator::get_serial_list;
+use std::sync::mpsc::{channel, Receiver};
 
 // Wrapper type for SerialItem to enable trait definition
 #[derive(Clone)]
@@ -95,10 +96,13 @@ struct App {
     progress: f32,
     ver_divider_position: Option<u16>,
     selection: Option<RadioHW>,
-    flashing: bool,
+    flash_in_progress: bool,
+    backup_in_progress: bool,
+    backup_progress: Option<Receiver<(usize, usize)>>,
     serial_ports: Vec<SerialPort>,
     serial_port: Option<SerialPort>,
     ports_combo_state: combo_box::State<SerialPort>,
+    status_text: String,
 }
 
 #[derive(Debug, Clone)]
@@ -144,10 +148,13 @@ impl Application for App {
                 progress: 0.0,
                 ver_divider_position: Some(150),
                 selection: None,
-                flashing: false,
+                flash_in_progress: false,
+                backup_in_progress: false,
+                backup_progress: None,
                 serial_ports: ports.clone(),
                 serial_port: None,
                 ports_combo_state: combo_box::State::new(ports),
+                status_text: String::from("Select an action"),
             },
             Command::none(),
         )
@@ -173,19 +180,32 @@ impl Application for App {
                 self.selection = Some(radio_hw);
             }
             Message::Tick => {
-                if self.flashing {
+                if self.flash_in_progress {
                     self.progress += 5.0;
                     debug!("update progress...");
                     if self.progress > 100.0 {
-                        self.flashing = false;
+                        self.flash_in_progress = false;
+                    }
+                }
+                if self.backup_in_progress {
+                    if self.backup_progress.is_some() {
+                        let (transferred_bytes, total_bytes) = match self.backup_progress.as_ref().unwrap().try_iter().last() {
+                            Some(x) => x,
+                            None => { self.status_text = String::from("Backup complete!"); (100, 100) },
+                        };
+                        self.progress = transferred_bytes as f32 / total_bytes as f32 * 100.0;
+                        if transferred_bytes < total_bytes {
+                            self.status_text = String::from(format!("{transferred_bytes}/{total_bytes}"));
+                        }
                     }
                 }
             }
             Message::FlashPressed => {
                 self.progress = 0.0;
-                self.flashing = true;
+                self.flash_in_progress = true;
+                self.backup_in_progress = false;
                 debug!("flash");
-                // TODO: Flashing
+                // TODO: flash_in_progress
             }
             Message::OpenFWPressed => {
                 return Command::perform(
@@ -208,6 +228,8 @@ impl Application for App {
             }
             // Backup functionality needs a folder where to store backups
             Message::BackupPressed => {
+                self.backup_in_progress = true;
+                self.flash_in_progress = false;
                 return Command::perform(
                     async {
                         let file = AsyncFileDialog::new().pick_folder().await;
@@ -229,8 +251,12 @@ impl Application for App {
                     Some(p) => p.name.clone(),
                     None => panic!("No serial port selected!"),
                 };
-                rtxlink::link::Link::new(&port);
-                rtxlink::flow::backup(path);
+                let (progress_tx, progress_rx) = channel();
+                self.backup_progress = Some(progress_rx);
+                std::thread::spawn(move || {
+                    rtxlink::link::Link::new(&port).expect("Error in opening serial port!");
+                    rtxlink::flow::backup(path, Some(&progress_tx));
+                });
             }
             Message::PortSelected(port) => {
                 self.serial_port = Some(port);
@@ -266,7 +292,7 @@ impl Application for App {
 
         let port_combo_box = combo_box(
             &self.ports_combo_state,
-            "Select a serial port...",
+            "Select a serial port",
             self.serial_port.as_ref(),
             Message::PortSelected,
         )
@@ -275,13 +301,6 @@ impl Application for App {
         .width(250);
 
         let second = Container::new(
-            //     column![
-            //      button("Increment").on_press(Message::IncrementPressed),
-            //      text(self.value).size(50),
-            //      button("Decrement").on_press(Message::DecrementPressed),
-            //      progress_bar(0.0..=100.0, self.progress),
-            //      slider(0.0..=100.0, self.progress, Message::SliderChanged).step(0.01)
-            //  ])
             column![
                 row![
                     column![text("Version:").size(15),]
@@ -294,15 +313,20 @@ impl Application for App {
                         .padding(Padding::from([0, 10, 0, 0]))
                         .width(120),
                     port_combo_box,
+                ].padding(30),
+                row![
+                    column![text(&self.status_text).size(20),]
+                        .width(500)
+                        .align_items(Alignment::Center)
                 ],
                 column![
                     progress_bar(0.0..=100.0, self.progress),
                     row![
-                        button("Open FW File").on_press(Message::OpenFWPressed),
+                        button("1. Open FW File").on_press(Message::OpenFWPressed),
                         horizontal_space(10),
-                        button("Flash Radio").on_press(Message::FlashPressed),
+                        button("2. Flash Radio").on_press(Message::FlashPressed),
                         horizontal_space(10),
-                        button("Backup").on_press(Message::BackupPressed),
+                        button("3. Backup").on_press(Message::BackupPressed),
                     ]
                     .padding(15)
                 ]
@@ -326,22 +350,6 @@ impl Application for App {
         )
         .into()
 
-        // row![
-        //     column![
-        //         button("Increment").on_press(Message::IncrementPressed),
-        //         text(self.value).size(50),
-        //         button("Decrement").on_press(Message::DecrementPressed)
-        //     ],
-        //     vertical_rule(1),
-        //     column![
-        //         button("Increment").on_press(Message::IncrementPressed),
-        //         text("This is a test").size(15),
-        //         button("Decrement").on_press(Message::DecrementPressed)
-        //     ]
-        // ]
-        // .padding(20)
-        // .align_items(Alignment::Center)
-        // .into()
     }
 
     fn subscription(&self) -> Subscription<Message> {
