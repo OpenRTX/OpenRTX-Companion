@@ -11,52 +11,12 @@ use iced::window::icon::from_rgba;
 use iced::window::{Icon, Settings as Window};
 use iced::{executor, theme, Color, Padding};
 use iced::{Alignment, Application, Command, Element, Length, Settings, Subscription, Theme};
-use iced_aw::{split, Split};
+use iced_aw::{split, Split, TabLabel, Tabs};
 use image::{self, GenericImageView};
 use rfd::AsyncFileDialog;
 use tracing::debug;
-use rtxflash::{self, get_devices};
-// use rtxlink::{flow, link};
 use serial_enumerator::get_serial_list;
 use std::sync::mpsc::{channel, Receiver};
-
-// Wrapper type for SerialItem to enable trait definition
-#[derive(Clone)]
-pub struct SerialPort {
-    name: String,
-    vendor: String,
-    product: String,
-}
-
-// Display trait for SeriatPortInfo
-impl std::fmt::Display for SerialPort {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
-
-// Debug trait for SerialPortInfo
-impl std::fmt::Debug for SerialPort {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SerialPort")
-         .field("name", &self.name)
-         .field("product", &self.product)
-         .field("vendor", &self.vendor)
-         .finish()
-    }
-}
-
-// Unwrap result from serialport library
-fn get_ports() -> Vec<SerialPort> {
-    let ports = get_serial_list();
-    ports.iter().map(|p| {
-        SerialPort{
-            name: p.name.clone(),
-            vendor: p.vendor.clone().unwrap_or(String::from("")),
-            product: p.product.clone().unwrap_or(String::from("")),
-        }
-    }).collect()
-}
 
 fn icon() -> Icon {
     let image = image::load_from_memory(include_bytes!("../res/img/logo/icon.png")).unwrap();
@@ -90,13 +50,21 @@ pub fn main() -> iced::Result {
     App::run(settings)
 }
 
+// GUI Tabs
+#[derive(Clone, PartialEq, Eq, Debug)]
+enum TabId {
+    Flash,
+    Backup,
+    Files,
+}
+
 struct App {
     // The counter value
+    active_tab: TabId,
     value: i32,
     progress: f32,
     ver_divider_position: Option<u16>,
     selection: Option<RadioHW>,
-    flash_in_progress: bool,
     backup_in_progress: bool,
     backup_progress: Option<Receiver<(usize, usize)>>,
     serial_ports: Vec<SerialPort>,
@@ -107,6 +75,7 @@ struct App {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    TabSelected(TabId),
     IncrementPressed,
     DecrementPressed,
     OnVerResize(u16),
@@ -144,6 +113,7 @@ impl Application for App {
         let ports = get_ports();
         (
             Self {
+                active_tab: TabId::Flash,
                 value: 0,
                 progress: 0.0,
                 ver_divider_position: Some(150),
@@ -166,6 +136,7 @@ impl Application for App {
 
     fn update(&mut self, message: Message) -> Command<Self::Message> {
         match message {
+            Message::TabSelected(selected) => { self.active_tab = selected },
             Message::IncrementPressed => {
                 self.value += 1;
                 debug!("Inc");
@@ -199,32 +170,6 @@ impl Application for App {
                         }
                     }
                 }
-            }
-            Message::FlashPressed => {
-                self.progress = 0.0;
-                self.flash_in_progress = true;
-                self.backup_in_progress = false;
-                debug!("flash");
-                // TODO: flash_in_progress
-            }
-            Message::OpenFWPressed => {
-                return Command::perform(
-                    async {
-                        let file = AsyncFileDialog::new().pick_file().await;
-                        if let Some(file) = file {
-                            Some(format!(
-                                "file:///{}",
-                                file.path().to_str().unwrap().to_string()
-                            ))
-                        } else {
-                            None
-                        }
-                    },
-                    move |f| Message::OpenFile(f),
-                );
-            }
-            Message::OpenFile(file) => {
-                debug!(file);
             }
             // Backup functionality needs a folder where to store backups
             Message::BackupPressed => {
@@ -289,6 +234,33 @@ impl Application for App {
         .height(Length::Fill)
         .center_x()
         .center_y();
+
+        Tabs::new(Message::TabSelected)
+            .tab_icon_position(iced_aw::tabs::Position::Bottom)
+            .on_close(Message::TabClosed)
+            .push(
+                TabId::Flash,
+                state.flash_tab.tab_label(),
+                state.flash_tab.view(),
+            )
+            .push(
+                TabId::Backup,
+                state.backup_tab.tab_label(),
+                state.backup_tab.view(),
+            )
+            .push(
+                TabId::Files,
+                state.files_tab.tab_label(),
+                state.files_tab.view(),
+            )
+            .set_active_tab(&state.active_tab)
+            .tab_bar_style(theme.clone())
+            .icon_font(ICON)
+            .tab_bar_position(match position {
+                TabBarPosition::Top => iced_aw::TabBarPosition::Top,
+                TabBarPosition::Bottom => iced_aw::TabBarPosition::Bottom,
+            })
+            .into();
 
         let port_combo_box = combo_box(
             &self.ports_combo_state,
@@ -357,6 +329,32 @@ impl Application for App {
     }
 }
 
+trait Tab {
+    type Message;
+
+    fn title(&self) -> String;
+
+    fn tab_label(&self) -> TabLabel;
+
+    fn view(&self) -> Element<'_, Self::Message> {
+        let column = Column::new()
+            .spacing(20)
+            .push(Text::new(self.title()).size(HEADER_SIZE))
+            .push(self.content())
+            .align_items(iced::Alignment::Center);
+
+        Container::new(column)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .padding(TAB_PADDING)
+            .into()
+    }
+
+    fn content(&self) -> Element<'_, Self::Message>;
+}
+
 fn init_logging() {
     use tracing::subscriber::set_global_default;
     use tracing::Level;
@@ -370,33 +368,6 @@ fn init_logging() {
             .finish(),
     )
     .expect("setting default subscriber failed");
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadioHW {
-    Mduv3x0,
-    Twrplus,
-    Md3x0,
-}
-
-impl RadioHW {
-    fn all() -> [RadioHW; 3] {
-        [
-            RadioHW::Md3x0,
-            RadioHW::Mduv3x0,
-            RadioHW::Twrplus,
-        ]
-    }
-}
-
-impl From<RadioHW> for String {
-    fn from(radio: RadioHW) -> String {
-        String::from(match radio {
-            RadioHW::Md3x0 => "MD3x0",
-            RadioHW::Mduv3x0 => "MD-UV3x0",
-            RadioHW::Twrplus => "T-TWR Plus",
-        })
-    }
 }
 
 /// ``WINDOWS ONLY``: Have the application write to the terminal even with
