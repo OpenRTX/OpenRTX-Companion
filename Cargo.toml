@@ -1,5 +1,5 @@
 [package]
-name = "opnrtx-companion"
+name = "openrtx-companion"
 authors = ["OpenRTX Developers"]
 description = "GUI application to install and manage OpenRTX on ham radios"
 version = "0.0.1"
@@ -13,7 +13,7 @@ opt-level = "z"  # Optimize for size.
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-# [build-dependencies]
+[build-dependencies]
 # winresource = "0.1"
 
 [target.'cfg(windows)'.build-dependencies]
@@ -26,7 +26,7 @@ features = ["ico"]
 
 [dependencies]
 iced = {version = "0.10", features = ["smol"]}
-iced_aw = { version = "0.6.0", default-features = false, features = ["split"] }
+iced_aw = { version = "0.8.0", default-features = false, features = ["split", "tabs"] }
 rfd = "0.11.4"
 time = { version = "0.3.5", features = ["local-offset"] }
 tracing = "0.1.37"
