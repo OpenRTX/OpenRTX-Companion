@@ -1,53 +1,85 @@
 // show logs when debugging
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use iced::widget::{
-    button, column, horizontal_space, /* vertical_rule */
-    /* Text, */ progress_bar, /* slider, */
-    radio, row, text, Container,
-    combo_box,
+use iced::{
+    alignment::{self, Horizontal, Vertical},
+    font,
+    widget::{container, text, Column, Container, Text},
+    Application, Command, Element, Font, Length, Settings, Theme,
+    window::icon::from_rgba, executor, theme, Color,
+    Subscription,
 };
-use iced::window::icon::from_rgba;
-use iced::window::{Icon, Settings as Window};
-use iced::{executor, theme, Color, Padding};
-use iced::{Alignment, Application, Command, Element, Length, Settings, Subscription, Theme};
-use iced_aw::{split, Split, TabLabel, Tabs};
+use iced_aw::{TabLabel, Tabs, TabBarPosition, TabBarStyles};
 use image::{self, GenericImageView};
-use rfd::AsyncFileDialog;
-use tracing::debug;
-use serial_enumerator::get_serial_list;
-use std::sync::mpsc::{channel, Receiver};
 
-fn icon() -> Icon {
+mod flash;
+use flash::{FlashMessage, FlashTab};
+
+mod backup;
+use backup::{BackupMessage, BackupTab};
+
+const HEADER_SIZE: u16 = 32;
+const TAB_PADDING: u16 = 16;
+const ICON_BYTES: &[u8] = include_bytes!("../fonts/icons.ttf");
+const ICON: Font = Font::with_name("icons");
+
+fn app_icon() -> iced::window::Icon {
     let image = image::load_from_memory(include_bytes!("../res/img/logo/icon.png")).unwrap();
     let (w, h) = image.dimensions();
 
     from_rgba(image.as_bytes().to_vec(), w, h).unwrap()
 }
 
+enum Icon {
+    User,
+    Heart,
+    Calc,
+    CogAlt,
+}
+
+impl From<Icon> for char {
+    fn from(icon: Icon) -> Self {
+        match icon {
+            Icon::User => '\u{E800}',
+            Icon::Heart => '\u{E801}',
+            Icon::Calc => '\u{F1EC}',
+            Icon::CogAlt => '\u{E802}',
+        }
+    }
+}
+
 pub fn main() -> iced::Result {
     win_attach_terminal();
     init_logging();
 
-    let devices = get_devices();
-    println!("{:?}", devices);
-
     let settings: Settings<()> = Settings {
-        window: Window {
-            size: (600, 300),
+        window: iced::window::Settings {
+            size: iced::Size {
+                width: 300.0,
+                height: 600.0,
+            },
             resizable: true,
             decorations: true,
-            icon: Some(icon()),
-            min_size: Some((300, 300)),
+            icon: Some(app_icon()),
+            min_size: Some(iced::Size {
+                width: 300.0,
+                height: 300.0,
+            }),
             ..iced::window::Settings::default()
         },
         // try_opengles_first: true,
         antialiasing: true,
-        default_text_size: 17.0,
+        default_text_size: iced::Pixels(17.0),
         ..iced::Settings::default()
     };
 
-    App::run(settings)
+    OpenRTXCompanion::run(settings)
+}
+
+struct State {
+    active_tab: TabId,
+    flash_tab: FlashTab,
+    backup_tab: BackupTab,
 }
 
 // GUI Tabs
@@ -58,76 +90,57 @@ enum TabId {
     Files,
 }
 
-struct App {
-    // The counter value
-    active_tab: TabId,
-    value: i32,
-    progress: f32,
-    ver_divider_position: Option<u16>,
-    selection: Option<RadioHW>,
-    backup_in_progress: bool,
-    backup_progress: Option<Receiver<(usize, usize)>>,
-    serial_ports: Vec<SerialPort>,
-    serial_port: Option<SerialPort>,
-    ports_combo_state: combo_box::State<SerialPort>,
-    status_text: String,
+enum OpenRTXCompanion {
+    Loading,
+    Loaded(State),
 }
 
-#[derive(Debug, Clone)]
-pub enum Message {
+#[derive(Clone, Debug)]
+enum Message {
     TabSelected(TabId),
-    IncrementPressed,
-    DecrementPressed,
-    OnVerResize(u16),
-    SliderChanged(f32),
-    LanguageSelected(RadioHW),
+    Flash(FlashMessage),
+    Backup(BackupMessage),
     Tick,
-    FlashPressed,
-    OpenFWPressed,
-    OpenFile(Option<String>),
-    BackupPressed,
-    StartBackup(Option<String>),
-    PortSelected(SerialPort),
+    #[allow(dead_code)]
+    Loaded(Result<(), String>),
+    FontLoaded(Result<(), font::Error>),
+    TabClosed(TabId),
 }
 
-impl Application for App {
+async fn load() -> Result<(), String> {
+    Ok(())
+}
+
+impl Application for OpenRTXCompanion {
     type Executor = executor::Default;
     type Flags = ();
     type Message = Message;
     type Theme = Theme;
 
-    fn theme(&self) -> Self::Theme {
-        //Theme::Dark
-        Theme::custom(theme::Palette {
-            //background: Color::from_rgb(0.4, 0.4, 0.4),
-            background: Color::from_rgb(0.1, 0.1, 0.1),
-            text: Color::from_rgb(0.8, 0.8, 0.8),
-            //primary: Color::from_rgb(0.8, 0.8, 0.8),
-            primary: Color::from_rgb(0.98, 0.70, 0.07),
-            success: Color::from_rgb(0.0, 1.0, 0.0),
-            danger: Color::from_rgb(1.0, 0.0, 0.0),
-        })
+    fn new(_flags: ()) -> (OpenRTXCompanion, Command<Message>) {
+        (
+            OpenRTXCompanion::Loading,
+            Command::batch(vec![
+                font::load(ICON_BYTES).map(Message::FontLoaded),
+                font::load(iced_aw::BOOTSTRAP_FONT_BYTES).map(Message::FontLoaded),
+                Command::perform(load(), Message::Loaded),
+            ]),
+        )
     }
 
-    fn new(_flags: ()) -> (App, Command<Self::Message>) {
-        let ports = get_ports();
-        (
-            Self {
-                active_tab: TabId::Flash,
-                value: 0,
-                progress: 0.0,
-                ver_divider_position: Some(150),
-                selection: None,
-                flash_in_progress: false,
-                backup_in_progress: false,
-                backup_progress: None,
-                serial_ports: ports.clone(),
-                serial_port: None,
-                ports_combo_state: combo_box::State::new(ports),
-                status_text: String::from("Select an action"),
-            },
-            Command::none(),
-        )
+    fn theme(&self) -> Self::Theme {
+        //Theme::Dark
+        Theme::custom(
+            String::from("OpenRTX"),
+            theme::Palette {
+                //background: Color::from_rgb(0.4, 0.4, 0.4),
+                background: Color::from_rgb(0.1, 0.1, 0.1),
+                text: Color::from_rgb(0.8, 0.8, 0.8),
+                //primary: Color::from_rgb(0.8, 0.8, 0.8),
+                primary: Color::from_rgb(0.98, 0.70, 0.07),
+                success: Color::from_rgb(0.0, 1.0, 0.0),
+                danger: Color::from_rgb(1.0, 0.0, 0.0),
+        })
     }
 
     fn title(&self) -> String {
@@ -135,193 +148,61 @@ impl Application for App {
     }
 
     fn update(&mut self, message: Message) -> Command<Self::Message> {
-        match message {
-            Message::TabSelected(selected) => { self.active_tab = selected },
-            Message::IncrementPressed => {
-                self.value += 1;
-                debug!("Inc");
-            }
-            Message::DecrementPressed => {
-                self.value -= 1;
-                debug!("Dec");
-            }
-            Message::OnVerResize(_position) => self.ver_divider_position = Some(150), //Some(position),
-            Message::SliderChanged(x) => self.progress = x,
-            Message::LanguageSelected(radio_hw) => {
-                self.selection = Some(radio_hw);
-            }
-            Message::Tick => {
-                if self.flash_in_progress {
-                    self.progress += 5.0;
-                    debug!("update progress...");
-                    if self.progress > 100.0 {
-                        self.flash_in_progress = false;
-                    }
-                }
-                if self.backup_in_progress {
-                    if self.backup_progress.is_some() {
-                        let (transferred_bytes, total_bytes) = match self.backup_progress.as_ref().unwrap().try_iter().last() {
-                            Some(x) => x,
-                            None => { self.status_text = String::from("Backup complete!"); (100, 100) },
-                        };
-                        self.progress = transferred_bytes as f32 / total_bytes as f32 * 100.0;
-                        if transferred_bytes < total_bytes {
-                            self.status_text = String::from(format!("{transferred_bytes}/{total_bytes}"));
-                        }
-                    }
+        match self {
+            OpenRTXCompanion::Loading => {
+                if let Message::Loaded(_) = message {
+                    *self = OpenRTXCompanion::Loaded(State {
+                        active_tab: TabId::Flash,
+                        flash_tab: FlashTab::new(),
+                        backup_tab: BackupTab::new(),
+                    })
                 }
             }
-            // Backup functionality needs a folder where to store backups
-            Message::BackupPressed => {
-                self.backup_in_progress = true;
-                self.flash_in_progress = false;
-                return Command::perform(
-                    async {
-                        let file = AsyncFileDialog::new().pick_folder().await;
-                        if let Some(file) = file {
-                            Some(format!(
-                                "file:///{}",
-                                file.path().to_str().unwrap().to_string()
-                            ))
-                        } else {
-                            None
-                        }
-                    },
-                    move |f| Message::StartBackup(f),
-                );
-            }
-            Message::StartBackup(path) => {
-                // Open link with configured serial port
-                let port = match &self.serial_port {
-                    Some(p) => p.name.clone(),
-                    None => panic!("No serial port selected!"),
-                };
-                let (progress_tx, progress_rx) = channel();
-                self.backup_progress = Some(progress_rx);
-                std::thread::spawn(move || {
-                    rtxlink::link::Link::new(&port).expect("Error in opening serial port!");
-                    rtxlink::flow::backup(path, Some(&progress_tx));
-                });
-            }
-            Message::PortSelected(port) => {
-                self.serial_port = Some(port);
-            }
+            OpenRTXCompanion::Loaded(state) => match message {
+                Message::TabSelected(selected) => state.active_tab = selected,
+                Message::Flash(message) => state.flash_tab.update(message),
+                Message::Backup(message) => state.backup_tab.update(message),
+                Message::TabClosed(id) => println!("Tab {:?} event hit", id),
+                _ => {}
+            },
         }
+
         Command::none()
     }
 
-    fn view(&self) -> Element<Message> {
-        let first = Container::new(
-            //Text::new("Left")
-            column(
-                RadioHW::all()
-                    .iter()
-                    .cloned()
-                    .map(|language| {
-                        radio(
-                            language,
-                            language,
-                            self.selection,
-                            Message::LanguageSelected,
-                        )
-                    })
-                    .map(Element::from)
-                    .collect(),
+    fn view(&self) -> Element<'_, Self::Message> {
+        match self {
+            OpenRTXCompanion::Loading => container(
+                text("Loading...")
+                    .horizontal_alignment(alignment::Horizontal::Center)
+                    .size(50),
             )
-            .spacing(10)
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x()
-        .center_y();
-
-        Tabs::new(Message::TabSelected)
-            .tab_icon_position(iced_aw::tabs::Position::Bottom)
-            .on_close(Message::TabClosed)
-            .push(
-                TabId::Flash,
-                state.flash_tab.tab_label(),
-                state.flash_tab.view(),
-            )
-            .push(
-                TabId::Backup,
-                state.backup_tab.tab_label(),
-                state.backup_tab.view(),
-            )
-            .push(
-                TabId::Files,
-                state.files_tab.tab_label(),
-                state.files_tab.view(),
-            )
-            .set_active_tab(&state.active_tab)
-            .tab_bar_style(theme.clone())
-            .icon_font(ICON)
-            .tab_bar_position(match position {
-                TabBarPosition::Top => iced_aw::TabBarPosition::Top,
-                TabBarPosition::Bottom => iced_aw::TabBarPosition::Bottom,
-            })
-            .into();
-
-        let port_combo_box = combo_box(
-            &self.ports_combo_state,
-            "Select a serial port",
-            self.serial_port.as_ref(),
-            Message::PortSelected,
-        )
-        // .on_option_hovered(Message::OptionHovered)
-        // .on_close(Message::Closed)
-        .width(250);
-
-        let second = Container::new(
-            column![
-                row![
-                    column![text("Version:").size(15),]
-                        .padding(Padding::from([0, 10, 0, 0]))
-                        .width(80),
-                    column![text("0.3.0").size(15),]
-                ],
-                row![
-                    column![text("Serial port:").size(15),]
-                        .padding(Padding::from([0, 10, 0, 0]))
-                        .width(120),
-                    port_combo_box,
-                ].padding(30),
-                row![
-                    column![text(&self.status_text).size(20),]
-                        .width(500)
-                        .align_items(Alignment::Center)
-                ],
-                column![
-                    progress_bar(0.0..=100.0, self.progress),
-                    row![
-                        button("1. Open FW File").on_press(Message::OpenFWPressed),
-                        horizontal_space(10),
-                        button("2. Flash Radio").on_press(Message::FlashPressed),
-                        horizontal_space(10),
-                        button("3. Backup").on_press(Message::BackupPressed),
-                    ]
-                    .padding(15)
-                ]
-                .padding(Padding::from([40, 0, 0, 0]))
-                .align_items(Alignment::Center)
-            ]
-            .padding(20)
-            .align_items(Alignment::Start),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x()
-        .center_y();
-
-        Split::new(
-            first,
-            second,
-            self.ver_divider_position,
-            split::Axis::Vertical,
-            Message::OnVerResize,
-        )
-        .into()
-
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_y()
+            .center_x()
+            .into(),
+            OpenRTXCompanion::Loaded(state) => {
+                Tabs::new(Message::TabSelected)
+                    .tab_icon_position(iced_aw::tabs::Position::Bottom)
+                    .on_close(Message::TabClosed)
+                    .push(
+                        TabId::Flash,
+                        state.flash_tab.tab_label(),
+                        state.flash_tab.view(),
+                    )
+                    .push(
+                        TabId::Backup,
+                        state.backup_tab.tab_label(),
+                        state.backup_tab.view(),
+                    )
+                    .set_active_tab(&state.active_tab)
+                    .tab_bar_style(TabBarStyles::default())
+                    .icon_font(ICON)
+                    .tab_bar_position(TabBarPosition::Top)
+                    .into()
+            }
+        }
     }
 
     fn subscription(&self) -> Subscription<Message> {
