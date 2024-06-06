@@ -1,25 +1,19 @@
 // show logs when debugging
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use iced::widget::{
-    button, column, horizontal_space, /* vertical_rule */
-    /* Text, */ progress_bar, /* slider, */
-    radio, row, text, Container,
-    combo_box,
+use crate::Message;
+use crate::Tab;
+use iced::{
+    widget::{Button, Container, row, Row, column, Column, text, Text, combo_box, combo_box::State},
+    alignment::{Horizontal, Vertical},
+    Alignment, Element, Length, Padding, Command
 };
-use iced::window::icon::from_rgba;
-use iced::window::{Icon, Settings as Window};
-use iced::{executor, theme, Color, Padding};
-use iced::{Alignment, Application, Command, Element, Length, Settings, Subscription, Theme};
-use iced_aw::{split, Split};
-use iced_aw::native::{TabLabel, Tabs};
-use image::{self, GenericImageView};
-use rfd::AsyncFileDialog;
-use tracing::debug;
-use rtxflash::{self, get_devices};
-// use rtxlink::{flow, link};
+use iced_aw::tab_bar::TabLabel;
+use rfd::{AsyncFileDialog, FileHandle};
 use serial_enumerator::get_serial_list;
 use std::sync::mpsc::{channel, Receiver};
+
+use crate::Icon;
 
 // Wrapper type for SerialItem to enable trait definition
 #[derive(Clone)]
@@ -57,4 +51,171 @@ fn get_ports() -> Vec<SerialPort> {
             product: p.product.clone().unwrap_or(String::from("")),
         }
     }).collect()
+}
+
+#[derive(Clone, Debug)]
+pub enum BackupMessage {
+    BackupPressed,
+    RestorePressed,
+    OpenRestoreFilePressed,
+    RestoreFileSelected(Option<String>),
+    StartBackup(Option<String>),
+    PortSelected(SerialPort),
+    Tick,
+}
+
+pub struct BackupTab {
+    backup_in_progress: bool,
+    backup_progress: Option<Receiver<(usize, usize)>>,
+    serial_ports: Vec<SerialPort>,
+    serial_port: Option<SerialPort>,
+    ports_combo_state: combo_box::State<SerialPort>,
+    progress: f32,
+    restore_file: Option<String>,
+    status_text: String,
+}
+
+impl BackupTab {
+    pub fn new() -> Self {
+        let ports = get_ports();
+        BackupTab {
+            progress: 0.0,
+            backup_in_progress: false,
+            backup_progress: None,
+            serial_ports: ports.clone(),
+            serial_port: None,
+            ports_combo_state: combo_box::State::new(ports),
+            restore_file: None,
+            status_text: String::new(),
+        }
+    }
+
+    pub fn update(&mut self, message: BackupMessage) {
+        match message {
+            BackupMessage::BackupPressed => {
+                self.progress = 0.0;
+                self.backup_in_progress = true;
+                // TODO: backup_in_progress
+                println!("Starting OpenRTX backup");
+                println!("OpenRTX backup completed");
+                println!("Please reboot the radio");
+            }
+            // TODO
+            BackupMessage::RestorePressed => { }
+            BackupMessage::OpenRestoreFilePressed => {
+                Command::perform(
+                    async {
+                        let file = AsyncFileDialog::new().pick_file().await;
+                        if let Some(file) = file {
+                            Some(format!(
+                                "file:///{}",
+                                file.path().to_str().unwrap().to_string()
+                            ))
+                        } else {
+                            None
+                        }
+                    },
+                    move |f| BackupMessage::RestoreFileSelected(f),
+                );
+            }
+            BackupMessage::RestoreFileSelected(restore_file) => {
+                self.restore_file = restore_file;
+            }
+            BackupMessage::StartBackup(path) => {
+                // Open link with configured serial port
+                let port = match &self.serial_port {
+                    Some(p) => p.name.clone(),
+                    None => panic!("No serial port selected!"),
+                };
+                let (progress_tx, progress_rx) = channel();
+                self.backup_progress = Some(progress_rx);
+                std::thread::spawn(move || {
+                    rtxlink::link::Link::new(&port).expect("Error in opening serial port!");
+                    rtxlink::flow::backup(path, Some(&progress_tx));
+                });
+            }
+            BackupMessage::PortSelected(port) => {
+                self.serial_port = Some(port);
+            }
+            BackupMessage::Tick => {
+                if self.backup_in_progress {
+                    if self.backup_progress.is_some() {
+                        let (transferred_bytes, total_bytes) = match self.backup_progress.as_ref().unwrap().try_iter().last() {
+                            Some(x) => x,
+                            None => { self.status_text = String::from("Backup complete!"); (100, 100) },
+                        };
+                        self.progress = transferred_bytes as f32 / total_bytes as f32 * 100.0;
+                        if transferred_bytes < total_bytes {
+                            self.status_text = String::from(format!("{transferred_bytes}/{total_bytes}"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Tab for BackupTab {
+    type Message = Message;
+
+    fn title(&self) -> String {
+        String::from("Backup")
+    }
+
+    fn tab_label(&self) -> TabLabel {
+        //TabLabel::Text(self.title())
+        TabLabel::IconText(Icon::User.into(), self.title())
+    }
+
+    fn content(&self) -> Element<'_, Self::Message> {
+        let port_combo_box = combo_box(
+            &self.ports_combo_state,
+            "Select a serial port",
+            self.serial_port.as_ref(),
+            BackupMessage::PortSelected,
+        )
+        // .on_option_hovered(Message::OptionHovered)
+        // .on_close(Message::Closed)
+        .width(250);
+
+        let content: Element<'_, BackupMessage> = Container::new(
+            Column::new()
+                .align_items(Alignment::Center)
+                .max_width(600)
+                .padding(20)
+                .spacing(16)
+                .push(
+                    row![
+                        column![text("Serial port:").size(15),]
+                            .padding(Padding::from([0, 10, 0, 0]))
+                            .width(120),
+                        port_combo_box,
+                    ].padding(30),
+                )
+                .push(
+                    Row::new()
+                        .spacing(10)
+                        .push(
+                            Button::new(
+                                Text::new("Backup").horizontal_alignment(Horizontal::Center),
+                            )
+                            .width(Length::Fill)
+                            .on_press(BackupMessage::BackupPressed),
+                        )
+                        .push(
+                            Button::new(
+                                Text::new("Restore").horizontal_alignment(Horizontal::Center),
+                            )
+                            .width(Length::Fill)
+                            .on_press(BackupMessage::RestorePressed),
+                        ),
+                )
+        )
+        .align_x(Horizontal::Center)
+        .align_y(Vertical::Center)
+        .into();
+
+
+        content.map(Message::Backup)
+    }
 }
