@@ -55,8 +55,8 @@ pub fn main() -> iced::Result {
     let settings: Settings<()> = Settings {
         window: iced::window::Settings {
             size: iced::Size {
-                width: 300.0,
-                height: 600.0,
+                width: 600.0,
+                height: 300.0,
             },
             resizable: true,
             decorations: true,
@@ -159,14 +159,13 @@ impl Application for OpenRTXCompanion {
                 }
             }
             OpenRTXCompanion::Loaded(state) => match message {
-                Message::TabSelected(selected) => state.active_tab = selected,
+                Message::TabSelected(selected) => { state.active_tab = selected; Command::none() },
                 Message::Flash(message) => state.flash_tab.update(message),
                 Message::Backup(message) => state.backup_tab.update(message),
-                Message::TabClosed(id) => println!("Tab {:?} event hit", id),
+                Message::TabClosed(id) => { println!("Tab {:?} event hit", id); Command::none() },
                 _ => {}
             },
         }
-
         Command::none()
     }
 
@@ -185,7 +184,6 @@ impl Application for OpenRTXCompanion {
             OpenRTXCompanion::Loaded(state) => {
                 Tabs::new(Message::TabSelected)
                     .tab_icon_position(iced_aw::tabs::Position::Bottom)
-                    .on_close(Message::TabClosed)
                     .push(
                         TabId::Flash,
                         state.flash_tab.tab_label(),

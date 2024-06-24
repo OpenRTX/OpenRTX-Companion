@@ -4,12 +4,12 @@
 use crate::Message;
 use crate::Tab;
 use iced::{
-    widget::{Button, Container, row, Row, column, Column, text, Text, combo_box, combo_box::State},
+    widget::{Button, Container, row, Row, column, Column, text, Text, combo_box},
     alignment::{Horizontal, Vertical},
     Alignment, Element, Length, Padding, Command
 };
 use iced_aw::tab_bar::TabLabel;
-use rfd::{AsyncFileDialog, FileHandle};
+use rfd::AsyncFileDialog;
 use serial_enumerator::get_serial_list;
 use std::sync::mpsc::{channel, Receiver};
 
@@ -90,7 +90,7 @@ impl BackupTab {
         }
     }
 
-    pub fn update(&mut self, message: BackupMessage) {
+    pub fn update(&mut self, message: BackupMessage)  -> Command<BackupMessage> {
         match message {
             BackupMessage::BackupPressed => {
                 self.progress = 0.0;
@@ -103,7 +103,7 @@ impl BackupTab {
             // TODO
             BackupMessage::RestorePressed => { }
             BackupMessage::OpenRestoreFilePressed => {
-                Command::perform(
+                return Command::perform(
                     async {
                         let file = AsyncFileDialog::new().pick_file().await;
                         if let Some(file) = file {
@@ -151,7 +151,8 @@ impl BackupTab {
                     }
                 }
             }
-        }
+        };
+        Command::none()
     }
 }
 
@@ -164,7 +165,7 @@ impl Tab for BackupTab {
 
     fn tab_label(&self) -> TabLabel {
         //TabLabel::Text(self.title())
-        TabLabel::IconText(Icon::User.into(), self.title())
+        TabLabel::IconText(Icon::CogAlt.into(), self.title())
     }
 
     fn content(&self) -> Element<'_, Self::Message> {
@@ -182,8 +183,6 @@ impl Tab for BackupTab {
             Column::new()
                 .align_items(Alignment::Center)
                 .max_width(600)
-                .padding(20)
-                .spacing(16)
                 .push(
                     row![
                         column![text("Serial port:").size(15),]
