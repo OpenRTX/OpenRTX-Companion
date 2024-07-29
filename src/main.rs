@@ -98,7 +98,7 @@ enum Message {
     TabSelected(TabId),
     Flash(FlashMessage),
     Backup(BackupMessage),
-    CommandDone,
+    FilePath(Option<String>),
     Tick,
     #[allow(dead_code)]
     Loaded(Result<(), String>),
@@ -148,10 +148,10 @@ impl Application for OpenRTXCompanion {
                 Message::Flash(message) => state.flash_tab.update(message),
                 Message::Backup(message) => state.backup_tab.update(message),
                 Message::TabClosed(id) => { println!("Tab {:?} event hit", id); Command::none()},
-                Message::CommandDone => {
+                Message::FilePath(path) => {
                     match &state.active_tab {
-                        FlashTab => { state.flash_tab.update( FlashMessage::CommandDone ) },
-                        BackupTab => { state.backup_tab.update( BackupMessage::CommandDone ) }
+                        FlashTab => { state.flash_tab.update( FlashMessage::FilePath(path) ) },
+                        BackupTab => { state.backup_tab.update( BackupMessage::FilePath(path) ) }
                     };
                     Command::none()
                 },

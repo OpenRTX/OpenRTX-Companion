@@ -61,7 +61,7 @@ pub enum BackupMessage {
     RestoreFileSelected(Option<String>),
     StartBackup(Option<String>),
     PortSelected(SerialPort),
-    CommandDone,
+    FilePath(Option<String>),
     Tick,
 }
 
@@ -78,7 +78,15 @@ pub struct BackupTab {
 
 impl BackupTab {
     pub fn new() -> Self {
-        let ports = get_ports();
+        let mut ports = get_ports();
+        // Workaround: Iced crashes when rendering empty combo box
+        if ports.len() == 0 {
+            ports.push(SerialPort {
+                name: String::from("No serial port found!"),
+                vendor: String::from(""),
+                product: String::from(""),
+            });
+        }
         BackupTab {
             progress: 0.0,
             backup_in_progress: false,
@@ -117,7 +125,7 @@ impl BackupTab {
                             None
                         }
                     },
-                    move |f| Message::CommandDone,
+                    move |f| Message::FilePath(f),
                 )
             }
             BackupMessage::RestoreFileSelected(restore_file) => {
