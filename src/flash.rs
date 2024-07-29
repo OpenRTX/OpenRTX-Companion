@@ -3,11 +3,10 @@
 
 use iced::{
     alignment::{Horizontal, Vertical},
-    Alignment, Command, Element, Length, Padding,
-    widget::{Container, Button, Row, row, Column, column, Text, text,
-             combo_box}
+    widget::{Column, Container, text, Text, combo_box, row, Row, Button},
+    Element, Font, Length, Command, Alignment, Padding,
 };
-use iced_aw::TabLabel;
+use iced_aw::{TabLabel, Tabs};
 use image::{self, GenericImageView};
 use rfd::AsyncFileDialog;
 use tracing::debug;
@@ -49,6 +48,7 @@ pub enum FlashMessage {
     OpenFWPressed,
     OpenFile(Option<String>),
     FlashPressed,
+    CommandDone,
     Tick,
 }
 
@@ -88,20 +88,22 @@ impl FlashTab {
         }
     }
 
-    pub fn update(&mut self, message: FlashMessage) -> Command<FlashMessage> {
+    pub fn update(&mut self, message: FlashMessage) -> Command<Message> {
         match message {
             FlashMessage::DeviceSelected(device) => {
                 self.selected_device = Some(device);
+                Command::none()
             }
             FlashMessage::OpenFWPressed => {
-                return Command::perform(
+                Command::perform(
                     open_fw_file(),
-                    move |f| FlashMessage::OpenFile(f),
-                );
+                    move |f| Message::CommandDone
+                )
             }
             FlashMessage::OpenFile(file) => {
                 debug!(file);
                 self.firmware_path = file;
+                Command::none()
             }
             FlashMessage::FlashPressed => {
                 self.progress = 0.0;
@@ -112,6 +114,7 @@ impl FlashTab {
                 flash_device(self.selected_device.as_mut().unwrap(), self.firmware_path.as_mut().unwrap().as_ref());
                 println!("Firmware flash completed");
                 println!("Please reboot the radio");
+                Command::none()
             }
             FlashMessage::Tick => {
                 if self.flash_in_progress {
@@ -121,9 +124,10 @@ impl FlashTab {
                         self.flash_in_progress = false;
                     }
                 }
-            }
+                Command::none()
+            },
+            _ => Command::none()
         }
-        Command::none()
     }
 }
 
@@ -152,13 +156,12 @@ impl Tab for FlashTab {
 
         let content: Element<'_, FlashMessage> = Container::new(
             Column::new()
-                .align_items(Alignment::Center)
                 .max_width(600)
                 .push(
                     row![
-                        column![text("Device:").size(15),]
-                            .padding(Padding::from([0, 10, 0, 0]))
-                            .width(120),
+                        Column::new()
+                            .width(120)
+                            .push(text("Device:").size(15)),
                         device_combo_box,
                     ].padding(30),
                 )

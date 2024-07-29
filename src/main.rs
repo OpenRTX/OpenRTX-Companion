@@ -3,11 +3,10 @@
 
 use iced::{
     alignment::{self, Horizontal, Vertical},
-    font,
-    widget::{container, text, Column, Container, Text},
-    Application, Command, Element, Font, Length, Settings, Theme,
-    window::icon::from_rgba, executor, theme, Color,
-    Subscription,
+    widget::{Column, container, Container, text, Text},
+    Element, Length, Color,  window::icon::from_rgba,
+    theme, Theme, settings, Subscription, font, Font, Command,
+    Settings, Application, executor,
 };
 use iced_aw::{TabLabel, Tabs, TabBarPosition, TabBarStyles};
 use image::{self, GenericImageView};
@@ -48,7 +47,7 @@ impl From<Icon> for char {
     }
 }
 
-pub fn main() -> iced::Result {
+fn main() -> iced::Result {
     win_attach_terminal();
     init_logging();
 
@@ -67,7 +66,6 @@ pub fn main() -> iced::Result {
             }),
             ..iced::window::Settings::default()
         },
-        // try_opengles_first: true,
         antialiasing: true,
         default_text_size: iced::Pixels(17.0),
         ..iced::Settings::default()
@@ -100,6 +98,7 @@ enum Message {
     TabSelected(TabId),
     Flash(FlashMessage),
     Backup(BackupMessage),
+    CommandDone,
     Tick,
     #[allow(dead_code)]
     Loaded(Result<(), String>),
@@ -113,9 +112,9 @@ async fn load() -> Result<(), String> {
 
 impl Application for OpenRTXCompanion {
     type Executor = executor::Default;
-    type Flags = ();
     type Message = Message;
     type Theme = Theme;
+    type Flags = ();
 
     fn new(_flags: ()) -> (OpenRTXCompanion, Command<Message>) {
         (
@@ -128,28 +127,13 @@ impl Application for OpenRTXCompanion {
         )
     }
 
-    fn theme(&self) -> Self::Theme {
-        //Theme::Dark
-        Theme::custom(
-            String::from("OpenRTX"),
-            theme::Palette {
-                //background: Color::from_rgb(0.4, 0.4, 0.4),
-                background: Color::from_rgb(0.1, 0.1, 0.1),
-                text: Color::from_rgb(0.8, 0.8, 0.8),
-                //primary: Color::from_rgb(0.8, 0.8, 0.8),
-                primary: Color::from_rgb(0.98, 0.70, 0.07),
-                success: Color::from_rgb(0.0, 1.0, 0.0),
-                danger: Color::from_rgb(1.0, 0.0, 0.0),
-        })
-    }
-
     fn title(&self) -> String {
         String::from("OpenRTX Companion")
     }
 
-    fn update(&mut self, message: Message) -> Command<Self::Message> {
+    fn update(&mut self, message: Message) -> Command<Message> {
         match self {
-            OpenRTXCompanion::Loading => {
+             OpenRTXCompanion::Loading => {
                 if let Message::Loaded(_) = message {
                     *self = OpenRTXCompanion::Loaded(State {
                         active_tab: TabId::Flash,
@@ -157,16 +141,23 @@ impl Application for OpenRTXCompanion {
                         backup_tab: BackupTab::new(),
                     })
                 }
-            }
+                Command::none()
+            },
             OpenRTXCompanion::Loaded(state) => match message {
                 Message::TabSelected(selected) => { state.active_tab = selected; Command::none() },
                 Message::Flash(message) => state.flash_tab.update(message),
                 Message::Backup(message) => state.backup_tab.update(message),
-                Message::TabClosed(id) => { println!("Tab {:?} event hit", id); Command::none() },
-                _ => {}
-            },
+                Message::TabClosed(id) => { println!("Tab {:?} event hit", id); Command::none()},
+                Message::CommandDone => {
+                    match &state.active_tab {
+                        FlashTab => { state.flash_tab.update( FlashMessage::CommandDone ) },
+                        BackupTab => { state.backup_tab.update( BackupMessage::CommandDone ) }
+                    };
+                    Command::none()
+                },
+                _ => Command::none()
+            }
         }
-        Command::none()
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
@@ -203,6 +194,21 @@ impl Application for OpenRTXCompanion {
         }
     }
 
+    fn theme(&self) -> Theme {
+        //Theme::Dark
+        Theme::custom(
+            String::from("OpenRTX"),
+            theme::Palette {
+                //background: Color::from_rgb(0.4, 0.4, 0.4),
+                background: Color::from_rgb(0.1, 0.1, 0.1),
+                text: Color::from_rgb(0.8, 0.8, 0.8),
+                //primary: Color::from_rgb(0.8, 0.8, 0.8),
+                primary: Color::from_rgb(0.98, 0.70, 0.07),
+                success: Color::from_rgb(0.0, 1.0, 0.0),
+                danger: Color::from_rgb(1.0, 0.0, 0.0),
+        })
+    }
+
     fn subscription(&self) -> Subscription<Message> {
         iced::time::every(std::time::Duration::from_millis(500)).map(|_| Message::Tick)
     }
@@ -219,8 +225,8 @@ trait Tab {
         let column = Column::new()
             .spacing(20)
             .push(Text::new(self.title()).size(HEADER_SIZE))
-            .push(self.content())
-            .align_items(iced::Alignment::Center);
+            .align_items(iced::Alignment::Center)
+            .push(self.content());
 
         Container::new(column)
             .width(Length::Fill)
