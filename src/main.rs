@@ -55,7 +55,7 @@ fn main() -> iced::Result {
         window: iced::window::Settings {
             size: iced::Size {
                 width: 600.0,
-                height: 300.0,
+                height: 400.0,
             },
             resizable: true,
             decorations: true,
@@ -98,7 +98,10 @@ enum Message {
     TabSelected(TabId),
     Flash(FlashMessage),
     Backup(BackupMessage),
+    // These two messages are the result of asynchronous actions and need
+    // to be propagated to the respective tabs
     FilePath(Option<String>),
+    StartBackup(Option<String>),
     Tick,
     #[allow(dead_code)]
     Loaded(Result<(), String>),
@@ -155,6 +158,12 @@ impl Application for OpenRTXCompanion {
                     };
                     Command::none()
                 },
+                Message::StartBackup(path) => { state.backup_tab.update( BackupMessage::StartBackup(path) ); Command::none() },
+                Message::Tick => {
+                    state.flash_tab.update( FlashMessage::Tick );
+                    state.backup_tab.update( BackupMessage::Tick );
+                    Command::none()
+                }
                 _ => Command::none()
             }
         }

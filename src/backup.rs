@@ -5,7 +5,7 @@ use crate::Message;
 use crate::Tab;
 use iced::{
     alignment::{Horizontal, Vertical},
-    widget::{Column, Container, text, Text, combo_box, row, Row, Button},
+    widget::{Column, Container, text, Text, combo_box, row, Row, Button, progress_bar},
     Element, Font, Length, Command, Alignment, Padding,
 };
 use iced_aw::{TabLabel, Tabs};
@@ -95,7 +95,7 @@ impl BackupTab {
             serial_port: None,
             ports_combo_state: combo_box::State::new(ports),
             restore_file: None,
-            status_text: String::new(),
+            status_text: String::from("Select an action"),
         }
     }
 
@@ -104,13 +104,21 @@ impl BackupTab {
             BackupMessage::BackupPressed => {
                 self.progress = 0.0;
                 self.backup_in_progress = true;
-                // TODO: backup_in_progress
-                println!("Starting OpenRTX backup");
-                println!("OpenRTX backup completed");
-                println!("Please reboot the radio");
-                Command::none()
-            }
-            // TODO
+                Command::perform(
+                    async {
+                        let file = AsyncFileDialog::new().pick_folder().await;
+                        if let Some(file) = file {
+                            Some(format!(
+                                "file:///{}",
+                                file.path().to_str().unwrap().to_string()
+                            ))
+                        } else {
+                            None
+                        }
+                    },
+                    move |f| Message::StartBackup(f),
+                )
+            },
             BackupMessage::RestorePressed => { Command::none() }
             BackupMessage::OpenRestoreFilePressed => {
                 Command::perform(
@@ -202,11 +210,24 @@ impl Tab for BackupTab {
                             .width(120)
                             .push(text("Serial port:").size(15)),
                         port_combo_box,
-                    ].padding(30),
+                    ].padding(20),
+                )
+                .push(
+                    row![
+                        Column::new()
+                            .width(600)
+                            .align_items(Alignment::Center)
+                            .push(text(&self.status_text).size(20)),
+                    ],
+                )
+                .push(
+                    row![
+                        progress_bar(0.0..=100.0, self.progress),
+                    ].padding(20),
                 )
                 .push(
                     Row::new()
-                        .spacing(10)
+                        .spacing(20)
                         .push(
                             Button::new(
                                 Text::new("Backup").horizontal_alignment(Horizontal::Center),

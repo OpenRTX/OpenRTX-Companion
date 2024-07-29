@@ -3,7 +3,7 @@
 
 use iced::{
     alignment::{Horizontal, Vertical},
-    widget::{Column, Container, text, Text, combo_box, row, Row, Button},
+    widget::{Column, Container, text, Text, combo_box, row, Row, Button, progress_bar},
     Element, Font, Length, Command, Alignment, Padding,
 };
 use iced_aw::{TabLabel, Tabs};
@@ -60,6 +60,7 @@ pub struct FlashTab {
     firmware_path: Option<String>,
     flash_in_progress: bool,
     progress: f32,
+    status_text: String,
 }
 
 async fn open_fw_file() -> Option<String> {
@@ -92,8 +93,9 @@ impl FlashTab {
             selected_device: None,
             device_combo_state: combo_box::State::new(devices),
             firmware_path: None,
-            progress: 0.0,
             flash_in_progress: false,
+            progress: 0.0,
+            status_text: String::from("Select an action"),
         }
     }
 
@@ -110,33 +112,26 @@ impl FlashTab {
                 )
             }
             FlashMessage::FlashPressed => {
-                self.progress = 0.0;
+                self.progress = 1.0;
                 self.flash_in_progress = true;
-                debug!("flash");
-                // TODO: flash_in_progress
-                println!("Flashing OpenRTX firmware");
+                self.status_text = String::from("Flashing firmware...");
                 // rtxflash expects base path, not URI
                 let file_uri = self.firmware_path.as_mut().unwrap();
                 let bare_path = file_uri.strip_prefix("file:///");
                 flash_device(self.selected_device.as_mut().unwrap(), bare_path.unwrap());
-                println!("Firmware flash completed");
-                println!("Please reboot the radio");
+                self.progress = 100.0;
+                self.status_text = String::from("Flashing firmware...done! Reboot the radio.");
                 Command::none()
             }
             FlashMessage::FilePath(path) => {
-                self.firmware_path = path;
+                self.firmware_path = path.clone();
+                match path {
+                    Some(p) => { self.status_text = format!("Loaded firmware: {p}"); },
+                    None => { self.status_text = String::from("Error in reading firmware!") }
+                };
                 Command::none()
             }
-            FlashMessage::Tick => {
-                if self.flash_in_progress {
-                    self.progress += 5.0;
-                    debug!("update progress...");
-                    if self.progress > 100.0 {
-                        self.flash_in_progress = false;
-                    }
-                }
-                Command::none()
-            },
+            FlashMessage::Tick => Command::none(),
             _ => Command::none()
         }
     }
@@ -174,11 +169,24 @@ impl Tab for FlashTab {
                             .width(120)
                             .push(text("Device:").size(15)),
                         device_combo_box,
-                    ].padding(30),
+                    ].padding(20)
+                )
+                .push(
+                    row![
+                        Column::new()
+                            .width(600)
+                            .align_items(Alignment::Center)
+                            .push(text(&self.status_text).size(20)),
+                    ],
+                )
+                .push(
+                    row![
+                        progress_bar(0.0..=100.0, self.progress),
+                    ].padding(20),
                 )
                 .push(
                     Row::new()
-                        .spacing(10)
+                        .spacing(20)
                         .push(
                             Button::new(
                                 Text::new("Select Firmware").horizontal_alignment(Horizontal::Center),
