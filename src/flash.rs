@@ -48,7 +48,7 @@ pub enum FlashMessage {
     OpenFWPressed,
     OpenFile(Option<String>),
     FlashPressed,
-    CommandDone,
+    FilePath(Option<String>),
     Tick,
 }
 
@@ -76,7 +76,16 @@ async fn open_fw_file() -> Option<String> {
 
 impl FlashTab {
     pub fn new() -> Self {
-        let devices = get_devices();
+        let mut devices = get_devices();
+        // Workaround: Iced crashes when rendering empty combo box
+        if devices.len() == 0 {
+            devices.push(DeviceInfo {
+                index: 0,
+                manufacturer: String::from(""),
+                model: String::from("!"),
+                port: String::from("No radios found"),
+            });
+        }
         FlashTab {
             devices: devices.clone(),
             selected_model: None,
@@ -97,13 +106,8 @@ impl FlashTab {
             FlashMessage::OpenFWPressed => {
                 Command::perform(
                     open_fw_file(),
-                    move |f| Message::CommandDone
+                    move |f| Message::FilePath(f)
                 )
-            }
-            FlashMessage::OpenFile(file) => {
-                debug!(file);
-                self.firmware_path = file;
-                Command::none()
             }
             FlashMessage::FlashPressed => {
                 self.progress = 0.0;
@@ -111,9 +115,16 @@ impl FlashTab {
                 debug!("flash");
                 // TODO: flash_in_progress
                 println!("Flashing OpenRTX firmware");
-                flash_device(self.selected_device.as_mut().unwrap(), self.firmware_path.as_mut().unwrap().as_ref());
+                // rtxflash expects base path, not URI
+                let file_uri = self.firmware_path.as_mut().unwrap();
+                let bare_path = file_uri.strip_prefix("file:///");
+                flash_device(self.selected_device.as_mut().unwrap(), bare_path.unwrap());
                 println!("Firmware flash completed");
                 println!("Please reboot the radio");
+                Command::none()
+            }
+            FlashMessage::FilePath(path) => {
+                self.firmware_path = path;
                 Command::none()
             }
             FlashMessage::Tick => {
