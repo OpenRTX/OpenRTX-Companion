@@ -4,11 +4,11 @@
 use crate::Message;
 use crate::Tab;
 use iced::{
-    widget::{Button, Container, row, Row, column, Column, text, Text, combo_box},
     alignment::{Horizontal, Vertical},
-    Alignment, Element, Length, Padding, Command
+    widget::{Column, Container, text, Text, combo_box, row, Row, Button},
+    Element, Font, Length, Command, Alignment, Padding,
 };
-use iced_aw::tab_bar::TabLabel;
+use iced_aw::{TabLabel, Tabs};
 use rfd::AsyncFileDialog;
 use serial_enumerator::get_serial_list;
 use std::sync::mpsc::{channel, Receiver};
@@ -61,6 +61,7 @@ pub enum BackupMessage {
     RestoreFileSelected(Option<String>),
     StartBackup(Option<String>),
     PortSelected(SerialPort),
+    CommandDone,
     Tick,
 }
 
@@ -90,7 +91,7 @@ impl BackupTab {
         }
     }
 
-    pub fn update(&mut self, message: BackupMessage)  -> Command<BackupMessage> {
+    pub fn update(&mut self, message: BackupMessage) -> Command<Message> {
         match message {
             BackupMessage::BackupPressed => {
                 self.progress = 0.0;
@@ -99,11 +100,12 @@ impl BackupTab {
                 println!("Starting OpenRTX backup");
                 println!("OpenRTX backup completed");
                 println!("Please reboot the radio");
+                Command::none()
             }
             // TODO
-            BackupMessage::RestorePressed => { }
+            BackupMessage::RestorePressed => { Command::none() }
             BackupMessage::OpenRestoreFilePressed => {
-                return Command::perform(
+                Command::perform(
                     async {
                         let file = AsyncFileDialog::new().pick_file().await;
                         if let Some(file) = file {
@@ -115,11 +117,12 @@ impl BackupTab {
                             None
                         }
                     },
-                    move |f| BackupMessage::RestoreFileSelected(f),
-                );
+                    move |f| Message::CommandDone,
+                )
             }
             BackupMessage::RestoreFileSelected(restore_file) => {
                 self.restore_file = restore_file;
+                Command::none()
             }
             BackupMessage::StartBackup(path) => {
                 // Open link with configured serial port
@@ -133,9 +136,11 @@ impl BackupTab {
                     rtxlink::link::Link::new(&port).expect("Error in opening serial port!");
                     rtxlink::flow::backup(path, Some(&progress_tx));
                 });
+                Command::none()
             }
             BackupMessage::PortSelected(port) => {
                 self.serial_port = Some(port);
+                Command::none()
             }
             BackupMessage::Tick => {
                 if self.backup_in_progress {
@@ -149,10 +154,11 @@ impl BackupTab {
                             self.status_text = String::from(format!("{transferred_bytes}/{total_bytes}"));
                         }
                     }
-                }
+                };
+                Command::none()
             }
-        };
-        Command::none()
+            _ => Command::none()
+        }
     }
 }
 
@@ -181,13 +187,12 @@ impl Tab for BackupTab {
 
         let content: Element<'_, BackupMessage> = Container::new(
             Column::new()
-                .align_items(Alignment::Center)
                 .max_width(600)
                 .push(
                     row![
-                        column![text("Serial port:").size(15),]
-                            .padding(Padding::from([0, 10, 0, 0]))
-                            .width(120),
+                        Column::new()
+                            .width(120)
+                            .push(text("Serial port:").size(15)),
                         port_combo_box,
                     ].padding(30),
                 )
