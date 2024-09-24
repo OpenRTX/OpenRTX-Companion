@@ -9,7 +9,7 @@ license = "GPLv3"
 repository = "https://github.com/OpenRTX/OpenRTX-Companion"
 
 [profile.release]
-opt-level = "z"  # Optimize for size.
+opt-level = "z" # Optimize for size.
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -25,8 +25,17 @@ default-features = false
 features = ["ico"]
 
 [dependencies]
-iced_aw = {version = "0.9.2", default-features = false, features = ["split", "tabs", "icons"]}
-iced = {version = "0.12.1", default-features = false, features = ["advanced", "async-std", "smol", "image"]}
+iced_aw = { version = "0.9.2", default-features = false, features = [
+    "split",
+    "tabs",
+    "icons",
+] }
+iced = { version = "0.12.1", default-features = false, features = [
+    "advanced",
+    "async-std",
+    "smol",
+    "image",
+] }
 rfd = "0.11.4"
 time = { version = "0.3.5", features = ["local-offset"] }
 tracing = "0.1.37"

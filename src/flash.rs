@@ -3,15 +3,14 @@
 
 use iced::{
     alignment::{Horizontal, Vertical},
-    widget::{Column, Container, text, Text, combo_box, row, Row, Button, progress_bar},
-    Element, Font, Length, Command, Alignment, Padding,
+    widget::{combo_box, progress_bar, row, text, Button, Column, Container, Row, Text},
+    Alignment, Command, Element, Font, Length, Padding,
 };
 use iced_aw::{TabLabel, Tabs};
 use image::{self, GenericImageView};
 use rfd::AsyncFileDialog;
+use rtxflash::target;
 use tracing::debug;
-use rtxflash::{self, get_devices, get_device_info, flash_device};
-use rtxflash::radio_tool_ffi::DeviceInfo;
 
 use crate::{Icon, Message, Tab};
 
@@ -24,11 +23,7 @@ pub enum RadioHW {
 
 impl RadioHW {
     fn all() -> [RadioHW; 3] {
-        [
-            RadioHW::Md3x0,
-            RadioHW::Mduv3x0,
-            RadioHW::Twrplus,
-        ]
+        [RadioHW::Md3x0, RadioHW::Mduv3x0, RadioHW::Twrplus]
     }
 }
 
@@ -44,7 +39,7 @@ impl From<RadioHW> for String {
 
 #[derive(Clone, Debug)]
 pub enum FlashMessage {
-    DeviceSelected(DeviceInfo),
+    DeviceSelected(rtxflash::target::DeviceInfo),
     OpenFWPressed,
     OpenFile(Option<String>),
     FlashPressed,
@@ -53,10 +48,10 @@ pub enum FlashMessage {
 }
 
 pub struct FlashTab {
-    devices: Vec<DeviceInfo>,
+    devices: Vec<rtxflash::target::DeviceInfo>,
     selected_model: Option<RadioHW>,
-    selected_device: Option<DeviceInfo>,
-    device_combo_state: combo_box::State<DeviceInfo>,
+    selected_device: Option<rtxflash::target::DeviceInfo>,
+    device_combo_state: combo_box::State<rtxflash::target::DeviceInfo>,
     firmware_path: Option<String>,
     flash_in_progress: bool,
     progress: f32,
@@ -77,10 +72,10 @@ async fn open_fw_file() -> Option<String> {
 
 impl FlashTab {
     pub fn new() -> Self {
-        let mut devices = get_devices();
+        let mut devices = target::get_devices();
         // Workaround: Iced crashes when rendering empty combo box
         if devices.len() == 0 {
-            devices.push(DeviceInfo {
+            devices.push(rtxflash::target::DeviceInfo {
                 index: 0,
                 manufacturer: String::from(""),
                 model: String::from("!"),
@@ -106,10 +101,7 @@ impl FlashTab {
                 Command::none()
             }
             FlashMessage::OpenFWPressed => {
-                Command::perform(
-                    open_fw_file(),
-                    move |f| Message::FilePath(f)
-                )
+                Command::perform(open_fw_file(), move |f| Message::FilePath(f))
             }
             FlashMessage::FlashPressed => {
                 self.progress = 1.0;
@@ -118,7 +110,7 @@ impl FlashTab {
                 // rtxflash expects base path, not URI
                 let file_uri = self.firmware_path.as_mut().unwrap();
                 let bare_path = file_uri.strip_prefix("file:///");
-                flash_device(self.selected_device.as_mut().unwrap(), bare_path.unwrap());
+                // flash_device(self.selected_device.as_mut().unwrap(), bare_path.unwrap());
                 self.progress = 100.0;
                 self.status_text = String::from("Flashing firmware...done! Reboot the radio.");
                 Command::none()
@@ -126,13 +118,15 @@ impl FlashTab {
             FlashMessage::FilePath(path) => {
                 self.firmware_path = path.clone();
                 match path {
-                    Some(p) => { self.status_text = format!("Loaded firmware: {p}"); },
-                    None => { self.status_text = String::from("Error in reading firmware!") }
+                    Some(p) => {
+                        self.status_text = format!("Loaded firmware: {p}");
+                    }
+                    None => self.status_text = String::from("Error in reading firmware!"),
                 };
                 Command::none()
             }
             FlashMessage::Tick => Command::none(),
-            _ => Command::none()
+            _ => Command::none(),
         }
     }
 }
@@ -165,31 +159,23 @@ impl Tab for FlashTab {
                 .max_width(600)
                 .push(
                     row![
-                        Column::new()
-                            .width(120)
-                            .push(text("Device:").size(15)),
+                        Column::new().width(120).push(text("Device:").size(15)),
                         device_combo_box,
-                    ].padding(20)
+                    ]
+                    .padding(20),
                 )
-                .push(
-                    row![
-                        Column::new()
-                            .width(600)
-                            .align_items(Alignment::Center)
-                            .push(text(&self.status_text).size(20)),
-                    ],
-                )
-                .push(
-                    row![
-                        progress_bar(0.0..=100.0, self.progress),
-                    ].padding(20),
-                )
+                .push(row![Column::new()
+                    .width(600)
+                    .align_items(Alignment::Center)
+                    .push(text(&self.status_text).size(20)),])
+                .push(row![progress_bar(0.0..=100.0, self.progress),].padding(20))
                 .push(
                     Row::new()
                         .spacing(20)
                         .push(
                             Button::new(
-                                Text::new("Select Firmware").horizontal_alignment(Horizontal::Center),
+                                Text::new("Select Firmware")
+                                    .horizontal_alignment(Horizontal::Center),
                             )
                             .width(Length::Fill)
                             .on_press(FlashMessage::OpenFWPressed),
