@@ -3,12 +3,12 @@
 
 use iced::{
     alignment::{self, Horizontal, Vertical},
-    widget::{Column, container, Container, text, Text},
-    Element, Length, Color,  window::icon::from_rgba,
-    theme, Theme, settings, Subscription, font, Font, Command,
-    Settings, Application, executor,
+    executor, font, settings, theme,
+    widget::{container, text, Column, Container, Text},
+    window::icon::from_rgba,
+    Application, Color, Command, Element, Font, Length, Settings, Subscription, Theme,
 };
-use iced_aw::{TabLabel, Tabs, TabBarPosition, TabBarStyles};
+use iced_aw::{TabBarPosition, TabBarStyles, TabLabel, Tabs};
 use image::{self, GenericImageView};
 
 mod flash;
@@ -136,7 +136,7 @@ impl Application for OpenRTXCompanion {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match self {
-             OpenRTXCompanion::Loading => {
+            OpenRTXCompanion::Loading => {
                 if let Message::Loaded(_) = message {
                     *self = OpenRTXCompanion::Loaded(State {
                         active_tab: TabId::Flash,
@@ -145,27 +145,36 @@ impl Application for OpenRTXCompanion {
                     })
                 }
                 Command::none()
-            },
+            }
             OpenRTXCompanion::Loaded(state) => match message {
-                Message::TabSelected(selected) => { state.active_tab = selected; Command::none() },
-                Message::Flash(message) => state.flash_tab.update(message),
-                Message::Backup(message) => state.backup_tab.update(message),
-                Message::TabClosed(id) => { println!("Tab {:?} event hit", id); Command::none()},
-                Message::FilePath(path) => {
-                    match &state.active_tab {
-                        FlashTab => { state.flash_tab.update( FlashMessage::FilePath(path) ) },
-                        BackupTab => { state.backup_tab.update( BackupMessage::FilePath(path) ) }
-                    };
-                    Command::none()
-                },
-                Message::StartBackup(path) => { state.backup_tab.update( BackupMessage::StartBackup(path) ); Command::none() },
-                Message::Tick => {
-                    state.flash_tab.update( FlashMessage::Tick );
-                    state.backup_tab.update( BackupMessage::Tick );
+                Message::TabSelected(selected) => {
+                    state.active_tab = selected;
                     Command::none()
                 }
-                _ => Command::none()
-            }
+                Message::Flash(message) => state.flash_tab.update(message),
+                Message::Backup(message) => state.backup_tab.update(message),
+                Message::TabClosed(id) => {
+                    println!("Tab {:?} event hit", id);
+                    Command::none()
+                }
+                Message::FilePath(path) => {
+                    match &state.active_tab {
+                        FlashTab => state.flash_tab.update(FlashMessage::FilePath(path)),
+                        BackupTab => state.backup_tab.update(BackupMessage::FilePath(path)),
+                    };
+                    Command::none()
+                }
+                Message::StartBackup(path) => {
+                    state.backup_tab.update(BackupMessage::StartBackup(path));
+                    Command::none()
+                }
+                Message::Tick => {
+                    state.flash_tab.update(FlashMessage::Tick);
+                    state.backup_tab.update(BackupMessage::Tick);
+                    Command::none()
+                }
+                _ => Command::none(),
+            },
         }
     }
 
@@ -181,25 +190,23 @@ impl Application for OpenRTXCompanion {
             .center_y()
             .center_x()
             .into(),
-            OpenRTXCompanion::Loaded(state) => {
-                Tabs::new(Message::TabSelected)
-                    .tab_icon_position(iced_aw::tabs::Position::Bottom)
-                    .push(
-                        TabId::Flash,
-                        state.flash_tab.tab_label(),
-                        state.flash_tab.view(),
-                    )
-                    .push(
-                        TabId::Backup,
-                        state.backup_tab.tab_label(),
-                        state.backup_tab.view(),
-                    )
-                    .set_active_tab(&state.active_tab)
-                    .tab_bar_style(TabBarStyles::default())
-                    .icon_font(ICON)
-                    .tab_bar_position(TabBarPosition::Top)
-                    .into()
-            }
+            OpenRTXCompanion::Loaded(state) => Tabs::new(Message::TabSelected)
+                .tab_icon_position(iced_aw::tabs::Position::Bottom)
+                .push(
+                    TabId::Flash,
+                    state.flash_tab.tab_label(),
+                    state.flash_tab.view(),
+                )
+                .push(
+                    TabId::Backup,
+                    state.backup_tab.tab_label(),
+                    state.backup_tab.view(),
+                )
+                .set_active_tab(&state.active_tab)
+                .tab_bar_style(TabBarStyles::default())
+                .icon_font(ICON)
+                .tab_bar_position(TabBarPosition::Top)
+                .into(),
         }
     }
 
@@ -215,7 +222,8 @@ impl Application for OpenRTXCompanion {
                 primary: Color::from_rgb(0.98, 0.70, 0.07),
                 success: Color::from_rgb(0.0, 1.0, 0.0),
                 danger: Color::from_rgb(1.0, 0.0, 0.0),
-        })
+            },
+        )
     }
 
     fn subscription(&self) -> Subscription<Message> {

@@ -9,7 +9,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0e9889e6db118d49d88d84728d0e964d973a5680befb5f85f55141beea5c20b"
 dependencies = [
  "libc",
- "mach",
+ "mach 0.1.2",
 ]
 
 [[package]]
@@ -20,7 +20,7 @@ checksum = "99696c398cbaf669d2368076bdb3d627fb0ce51a26899d7c61228c5c0af3bf4a"
 dependencies = [
  "CoreFoundation-sys",
  "libc",
- "mach",
+ "mach 0.1.2",
 ]
 
 [[package]]
@@ -754,11 +754,21 @@ dependencies = [
 
 [[package]]
 name = "core-foundation"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25b9e03f145fd4f2bf705e07b900cd41fc636598fe5dc452fd0db1441c3f496d"
+dependencies = [
+ "core-foundation-sys 0.6.2",
+ "libc",
+]
+
+[[package]]
+name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
 dependencies = [
- "core-foundation-sys",
+ "core-foundation-sys 0.8.7",
  "libc",
 ]
 
@@ -768,9 +778,15 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b55271e5c8c478ad3f38ad24ef34923091e0548492a266d19b3c0b4d82574c63"
 dependencies = [
- "core-foundation-sys",
+ "core-foundation-sys 0.8.7",
  "libc",
 ]
+
+[[package]]
+name = "core-foundation-sys"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7ca8a5221364ef15ce201e8ed2f609fc312682a8f4e0e3d4aa5879764e0fa3b"
 
 [[package]]
 name = "core-foundation-sys"
@@ -1630,7 +1646,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "235e081f3925a06703c2d0117ea8b91f042756fd6e7a6e5d901e8ca1a996b220"
 dependencies = [
  "android_system_properties",
- "core-foundation-sys",
+ "core-foundation-sys 0.8.7",
  "iana-time-zone-haiku",
  "js-sys",
  "wasm-bindgen",
@@ -1890,11 +1906,21 @@ dependencies = [
 
 [[package]]
 name = "io-kit-sys"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f21dcc74995dd4cd090b147e79789f8d65959cbfb5f0b118002db869ea3bd0a0"
+dependencies = [
+ "core-foundation-sys 0.6.2",
+ "mach 0.2.3",
+]
+
+[[package]]
+name = "io-kit-sys"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "617ee6cf8e3f66f3b4ea67a4058564628cde41901316e19f559e14c7c72c5e7b"
 dependencies = [
- "core-foundation-sys",
+ "core-foundation-sys 0.8.7",
  "mach2",
 ]
 
@@ -2129,6 +2155,24 @@ name = "mach"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fd13ee2dd61cc82833ba05ade5a30bb3d63f7ced605ef827063c63078302de9"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "mach"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86dd2487cdfea56def77b88438a2c915fb45113c5319bfe7e14306ca4cd0b0e1"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "mach"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b823e83b2affd8f40a9ee8c29dbc56404c1e34cd2710921f2801e2cf29527afa"
 dependencies = [
  "libc",
 ]
@@ -2990,6 +3034,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "text-colorizer",
+ "usb_enumeration",
 ]
 
 [[package]]
@@ -3141,7 +3186,7 @@ dependencies = [
  "IOKit-sys",
  "defer-lite",
  "libc",
- "mach",
+ "mach 0.1.2",
  "nom",
  "windows 0.29.0",
 ]
@@ -3154,8 +3199,8 @@ checksum = "3ba776acc8c373b9175829206229366273225436845c04f9c20aab8099960e2e"
 dependencies = [
  "bitflags 2.6.0",
  "cfg-if",
- "core-foundation-sys",
- "io-kit-sys",
+ "core-foundation-sys 0.8.7",
+ "io-kit-sys 0.4.1",
  "libudev",
  "mach2",
  "nix",
@@ -3749,6 +3794,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5be21190ff5d38e8b4a2d3b6a3ae57f612cc39c96e83cedeaf7abc338a8bac4a"
 
 [[package]]
+name = "udev"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47504d1a49b2ea1b133e7ddd1d9f0a83cf03feb9b440c2c470d06db4589cf301"
+dependencies = [
+ "libc",
+ "libudev-sys",
+]
+
+[[package]]
 name = "unescaper"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3835,6 +3890,20 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+]
+
+[[package]]
+name = "usb_enumeration"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fc3aa6257554bbeb414a6d702ec8f63c3fc28dc521c74b1981383ff01598035"
+dependencies = [
+ "core-foundation 0.6.4",
+ "io-kit-sys 0.1.0",
+ "mach 0.3.2",
+ "thiserror",
+ "udev",
+ "winapi",
 ]
 
 [[package]]

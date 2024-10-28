@@ -45,7 +45,7 @@ tracing-subscriber = "0.3.17"
 serial_enumerator = "0"
 
 # library which currently wraps the radio_tool cxx tool
-rtxflash = { git = "https://github.com/OpenRTX/rtxflash", branch = "main" }
+rtxflash = { git = "https://github.com/OpenRTX/rtxflash", branch = "a36plus" }
 
 # library to manage the OpenRTX Communication Protocol (rtxlink)
 rtxlink = { git = "https://github.com/OpenRTX/rtxlink", branch = "main" }
