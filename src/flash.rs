@@ -4,7 +4,7 @@
 use iced::{
     alignment::{Horizontal, Vertical},
     widget::{combo_box, progress_bar, row, text, Button, Column, Container, Row, Text},
-    Alignment, Command, Element, Font, Length, Padding,
+    Alignment, Element, Font, Length, Padding, Task,
 };
 use iced_aw::{TabLabel, Tabs};
 use image::{self, GenericImageView};
@@ -76,23 +76,14 @@ async fn open_fw_file() -> Option<String> {
     }
 }
 
-impl FlashTab {
-    pub fn new() -> Self {
-        let mut devices = target::get_devices();
+impl Default for FlashTab {
+    fn default() -> Self {
+        let devices = target::get_devices();
         let mut targets = vec![] as Vec<target::Target>;
         for t in target::get_targets() {
             targets.push(t);
         }
-        // Workaround: Iced crashes when rendering empty combo box
-        if devices.len() == 0 {
-            devices.push(rtxflash::target::DeviceInfo {
-                index: 0,
-                manufacturer: String::from(""),
-                model: String::from("!"),
-                port: String::from("No radios found"),
-            });
-        }
-        FlashTab {
+        Self {
             devices: devices.clone(),
             targets: targets.clone(),
             selected_model: None,
@@ -107,19 +98,21 @@ impl FlashTab {
             status_text: String::from("Select an action"),
         }
     }
+}
 
-    pub fn update(&mut self, message: FlashMessage) -> Command<Message> {
+impl FlashTab {
+    pub fn update(&mut self, message: FlashMessage) -> Task<Message> {
         match message {
             FlashMessage::DeviceSelected(device) => {
                 self.selected_device = Some(device);
-                Command::none()
+                Task::none()
             }
             FlashMessage::TargetSelected(target) => {
                 self.selected_target = Some(target);
-                Command::none()
+                Task::none()
             }
             FlashMessage::OpenFWPressed => {
-                Command::perform(open_fw_file(), move |f| Message::FilePath(f))
+                Task::perform(open_fw_file(), move |f| Message::FilePath(f))
             }
             FlashMessage::FlashPressed => {
                 self.progress = 1.0;
@@ -135,9 +128,9 @@ impl FlashTab {
                 let (progress_tx, progress_rx) = channel();
                 self.flash_progress = Some(progress_rx);
                 std::thread::spawn(move || {
-                    flash::flash(target, port, bare_path, Some(&progress_tx));
+                    let _ = flash::flash(target, port, bare_path, Some(&progress_tx));
                 });
-                Command::none()
+                Task::none()
             }
             FlashMessage::FilePath(path) => {
                 self.firmware_path = path.clone();
@@ -147,7 +140,7 @@ impl FlashTab {
                     }
                     None => self.status_text = String::from("Error in reading firmware!"),
                 };
-                Command::none()
+                Task::none()
             }
             FlashMessage::Tick => {
                 if self.flash_in_progress {
@@ -156,21 +149,21 @@ impl FlashTab {
                             match self.flash_progress.as_ref().unwrap().try_iter().last() {
                                 Some(x) => x,
                                 None => {
-                                    self.status_text =
-                                        String::from("Flashing complete! Reboot the radio.");
+                                    self.status_text = String::from("Flashing complete!");
                                     (100, 100)
                                 }
                             };
                         self.progress = transferred_bytes as f32 / total_bytes as f32 * 100.0;
                         if transferred_bytes < total_bytes {
-                            self.status_text =
-                                String::from(format!("{transferred_bytes}/{total_bytes}"));
+                            self.status_text = String::from(format!(
+                                "Flashed chunk {transferred_bytes}/{total_bytes}"
+                            ));
                         }
                     }
                 };
-                Command::none()
+                Task::none()
             }
-            _ => Command::none(),
+            _ => Task::none(),
         }
     }
 }
@@ -183,8 +176,8 @@ impl Tab for FlashTab {
     }
 
     fn tab_label(&self) -> TabLabel {
-        //TabLabel::Text(self.title())
-        TabLabel::IconText(Icon::CogAlt.into(), self.title())
+        TabLabel::Text(self.title())
+        // TabLabel::IconText(Icon::CogAlt.into(), self.title())
     }
 
     fn content(&self) -> Element<'_, Self::Message> {
@@ -224,26 +217,25 @@ impl Tab for FlashTab {
                 )
                 .push(row![Column::new()
                     .width(600)
-                    .align_items(Alignment::Center)
-                    .push(text(&self.status_text).size(20)),])
+                    .align_x(Alignment::Center)
+                    .push(
+                        text(&self.status_text)
+                            .wrapping(text::Wrapping::Word)
+                            .size(20)
+                    ),])
                 .push(row![progress_bar(0.0..=100.0, self.progress),].padding(20))
                 .push(
                     Row::new()
                         .spacing(20)
                         .push(
-                            Button::new(
-                                Text::new("Select Firmware")
-                                    .horizontal_alignment(Horizontal::Center),
-                            )
-                            .width(Length::Fill)
-                            .on_press(FlashMessage::OpenFWPressed),
+                            Button::new(Text::new("Select Firmware").align_x(Horizontal::Center))
+                                .width(Length::Fill)
+                                .on_press(FlashMessage::OpenFWPressed),
                         )
                         .push(
-                            Button::new(
-                                Text::new("Flash").horizontal_alignment(Horizontal::Center),
-                            )
-                            .width(Length::Fill)
-                            .on_press(FlashMessage::FlashPressed),
+                            Button::new(Text::new("Flash").align_x(Horizontal::Center))
+                                .width(Length::Fill)
+                                .on_press(FlashMessage::FlashPressed),
                         ),
                 ),
         )

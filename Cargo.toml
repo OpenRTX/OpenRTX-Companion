@@ -25,17 +25,14 @@ default-features = false
 features = ["ico"]
 
 [dependencies]
-iced_aw = { version = "0.9.2", default-features = false, features = [
-    "split",
-    "tabs",
-    "icons",
-] }
-iced = { version = "0.12.1", default-features = false, features = [
+iced_aw = { version = "0.11.0", default-features = false, features = ["tabs"] }
+iced = { version = "0.13.1", default-features = false, features = [
     "advanced",
     "async-std",
-    "smol",
-    "image",
+    "wgpu",
+    "debug",
 ] }
+iced_fonts = "0.1.1"
 rfd = "0.11.4"
 time = { version = "0.3.5", features = ["local-offset"] }
 tracing = "0.1.37"
@@ -58,4 +55,4 @@ winapi = { version = "0.3.9", features = ["shellapi", "winuser"] }
 OriginalFilename = "opnrtx-companion.exe"
 FileDescription = "An OpenRTX Companion for radio modification. https://github.com/OpenRTX/OpenRTX-Companion - GPLv3"
 Comments = "This software is licensed under GPLv3. You can obtain the source code here: https://github.com/OpenRTX/OpenRTX-Companion"
-LegalCopyright = "Copyright © 2023 - OpenRTX Project"
+LegalCopyright = "Copyright © 2023-2024 - OpenRTX Project"

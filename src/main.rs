@@ -2,13 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use iced::{
-    alignment::{self, Horizontal, Vertical},
-    executor, font, settings, theme,
-    widget::{container, text, Column, Container, Text},
+    alignment::{Horizontal, Vertical},
+    font, theme,
+    widget::{Column, Container, Text},
+    window,
     window::icon::from_rgba,
-    Application, Color, Command, Element, Font, Length, Settings, Subscription, Theme,
+    Color, Element, Font, Length, Settings, Subscription, Task, Theme,
 };
-use iced_aw::{TabBarPosition, TabBarStyles, TabLabel, Tabs};
+use iced_aw::{TabBarPosition, TabLabel, Tabs};
 use image::{self, GenericImageView};
 
 mod flash;
@@ -49,48 +50,54 @@ impl From<Icon> for char {
 
 fn main() -> iced::Result {
     win_attach_terminal();
-    init_logging();
+    // init_logging();
 
-    let settings: Settings<()> = Settings {
-        window: iced::window::Settings {
-            size: iced::Size {
-                width: 600.0,
-                height: 400.0,
-            },
-            resizable: true,
-            decorations: true,
-            icon: Some(app_icon()),
-            min_size: Some(iced::Size {
-                width: 300.0,
-                height: 300.0,
-            }),
-            ..iced::window::Settings::default()
-        },
-        antialiasing: true,
+    let mut window_settings = window::Settings::default();
+    window_settings.size = iced::Size {
+        width: 600.0,
+        height: 400.0,
+    };
+    window_settings.resizable = true;
+    window_settings.decorations = true;
+    window_settings.icon = Some(app_icon());
+    window_settings.min_size = Some(iced::Size {
+        width: 300.0,
+        height: 300.0,
+    });
+    let settings = Settings {
+        id: Some(String::from("OpenRTX Companion")),
         default_text_size: iced::Pixels(17.0),
-        ..iced::Settings::default()
+        antialiasing: true,
+        ..Settings::default()
     };
 
-    OpenRTXCompanion::run(settings)
-}
-
-struct State {
-    active_tab: TabId,
-    flash_tab: FlashTab,
-    backup_tab: BackupTab,
+    iced::application(
+        "OpenRTX Companion",
+        OpenRTXCompanion::update,
+        OpenRTXCompanion::view,
+    )
+    .font(iced_fonts::REQUIRED_FONT_BYTES)
+    .window(window_settings)
+    .settings(settings)
+    .theme(OpenRTXCompanion::theme)
+    .subscription(OpenRTXCompanion::subscription)
+    .run()
 }
 
 // GUI Tabs
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 enum TabId {
+    #[default]
     Flash,
     Backup,
     Files,
 }
 
-enum OpenRTXCompanion {
-    Loading,
-    Loaded(State),
+#[derive(Default)]
+struct OpenRTXCompanion {
+    active_tab: TabId,
+    flash_tab: FlashTab,
+    backup_tab: BackupTab,
 }
 
 #[derive(Clone, Debug)]
@@ -113,101 +120,54 @@ async fn load() -> Result<(), String> {
     Ok(())
 }
 
-impl Application for OpenRTXCompanion {
-    type Executor = executor::Default;
-    type Message = Message;
-    type Theme = Theme;
-    type Flags = ();
-
-    fn new(_flags: ()) -> (OpenRTXCompanion, Command<Message>) {
-        (
-            OpenRTXCompanion::Loading,
-            Command::batch(vec![
-                font::load(ICON_BYTES).map(Message::FontLoaded),
-                font::load(iced_aw::BOOTSTRAP_FONT_BYTES).map(Message::FontLoaded),
-                Command::perform(load(), Message::Loaded),
-            ]),
-        )
-    }
-
+impl OpenRTXCompanion {
     fn title(&self) -> String {
         String::from("OpenRTX Companion")
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
-        match self {
-            OpenRTXCompanion::Loading => {
-                if let Message::Loaded(_) = message {
-                    *self = OpenRTXCompanion::Loaded(State {
-                        active_tab: TabId::Flash,
-                        flash_tab: FlashTab::new(),
-                        backup_tab: BackupTab::new(),
-                    })
-                }
-                Command::none()
+    fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::TabSelected(selected) => {
+                self.active_tab = selected;
+                Task::none()
             }
-            OpenRTXCompanion::Loaded(state) => match message {
-                Message::TabSelected(selected) => {
-                    state.active_tab = selected;
-                    Command::none()
-                }
-                Message::Flash(message) => state.flash_tab.update(message),
-                Message::Backup(message) => state.backup_tab.update(message),
-                Message::TabClosed(id) => {
-                    println!("Tab {:?} event hit", id);
-                    Command::none()
-                }
-                Message::FilePath(path) => {
-                    match &state.active_tab {
-                        FlashTab => state.flash_tab.update(FlashMessage::FilePath(path)),
-                        BackupTab => state.backup_tab.update(BackupMessage::FilePath(path)),
-                    };
-                    Command::none()
-                }
-                Message::StartBackup(path) => {
-                    state.backup_tab.update(BackupMessage::StartBackup(path));
-                    Command::none()
-                }
-                Message::Tick => {
-                    state.flash_tab.update(FlashMessage::Tick);
-                    state.backup_tab.update(BackupMessage::Tick);
-                    Command::none()
-                }
-                _ => Command::none(),
+            Message::Flash(message) => self.flash_tab.update(message),
+            Message::Backup(message) => self.backup_tab.update(message),
+            Message::TabClosed(id) => {
+                println!("Tab {:?} event hit", id);
+                Task::none()
+            }
+            Message::FilePath(path) => match &self.active_tab {
+                FlashTab => self.flash_tab.update(FlashMessage::FilePath(path)),
+                BackupTab => self.backup_tab.update(BackupMessage::FilePath(path)),
             },
+            Message::StartBackup(path) => self.backup_tab.update(BackupMessage::StartBackup(path)),
+            Message::Tick => {
+                _ = self.flash_tab.update(FlashMessage::Tick);
+                _ = self.backup_tab.update(BackupMessage::Tick);
+                Task::none()
+            }
+            _ => Task::none(),
         }
     }
 
-    fn view(&self) -> Element<'_, Self::Message> {
-        match self {
-            OpenRTXCompanion::Loading => container(
-                text("Loading...")
-                    .horizontal_alignment(alignment::Horizontal::Center)
-                    .size(50),
+    fn view(&self) -> Element<'_, Message> {
+        Tabs::new(Message::TabSelected)
+            .tab_icon_position(iced_aw::tabs::Position::Bottom)
+            .push(
+                TabId::Flash,
+                self.flash_tab.tab_label(),
+                self.flash_tab.view(),
             )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_y()
-            .center_x()
-            .into(),
-            OpenRTXCompanion::Loaded(state) => Tabs::new(Message::TabSelected)
-                .tab_icon_position(iced_aw::tabs::Position::Bottom)
-                .push(
-                    TabId::Flash,
-                    state.flash_tab.tab_label(),
-                    state.flash_tab.view(),
-                )
-                .push(
-                    TabId::Backup,
-                    state.backup_tab.tab_label(),
-                    state.backup_tab.view(),
-                )
-                .set_active_tab(&state.active_tab)
-                .tab_bar_style(TabBarStyles::default())
-                .icon_font(ICON)
-                .tab_bar_position(TabBarPosition::Top)
-                .into(),
-        }
+            .push(
+                TabId::Backup,
+                self.backup_tab.tab_label(),
+                self.backup_tab.view(),
+            )
+            .set_active_tab(&self.active_tab)
+            .icon_font(ICON)
+            .tab_bar_position(TabBarPosition::Top)
+            .into()
     }
 
     fn theme(&self) -> Theme {
@@ -242,7 +202,7 @@ trait Tab {
         let column = Column::new()
             .spacing(20)
             .push(Text::new(self.title()).size(HEADER_SIZE))
-            .align_items(iced::Alignment::Center)
+            .align_x(iced::Alignment::Center)
             .push(self.content());
 
         Container::new(column)

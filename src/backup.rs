@@ -6,7 +6,7 @@ use crate::Tab;
 use iced::{
     alignment::{Horizontal, Vertical},
     widget::{combo_box, progress_bar, row, text, Button, Column, Container, Row, Text},
-    Alignment, Command, Element, Font, Length, Padding,
+    Alignment, Element, Font, Length, Padding, Task,
 };
 use iced_aw::{TabLabel, Tabs};
 use rfd::AsyncFileDialog;
@@ -77,8 +77,8 @@ pub struct BackupTab {
     status_text: String,
 }
 
-impl BackupTab {
-    pub fn new() -> Self {
+impl Default for BackupTab {
+    fn default() -> Self {
         let mut ports = get_ports();
         // Workaround: Iced crashes when rendering empty combo box
         if ports.len() == 0 {
@@ -88,7 +88,7 @@ impl BackupTab {
                 product: String::from(""),
             });
         }
-        BackupTab {
+        Self {
             progress: 0.0,
             backup_in_progress: false,
             backup_progress: None,
@@ -99,13 +99,15 @@ impl BackupTab {
             status_text: String::from("Select an action"),
         }
     }
+}
 
-    pub fn update(&mut self, message: BackupMessage) -> Command<Message> {
+impl BackupTab {
+    pub fn update(&mut self, message: BackupMessage) -> Task<Message> {
         match message {
             BackupMessage::BackupPressed => {
                 self.progress = 0.0;
                 self.backup_in_progress = true;
-                Command::perform(
+                Task::perform(
                     async {
                         let file = AsyncFileDialog::new().pick_folder().await;
                         if let Some(file) = file {
@@ -120,8 +122,8 @@ impl BackupTab {
                     move |f| Message::StartBackup(f),
                 )
             }
-            BackupMessage::RestorePressed => Command::none(),
-            BackupMessage::OpenRestoreFilePressed => Command::perform(
+            BackupMessage::RestorePressed => Task::none(),
+            BackupMessage::OpenRestoreFilePressed => Task::perform(
                 async {
                     let file = AsyncFileDialog::new().pick_file().await;
                     if let Some(file) = file {
@@ -137,7 +139,7 @@ impl BackupTab {
             ),
             BackupMessage::RestoreFileSelected(restore_file) => {
                 self.restore_file = restore_file;
-                Command::none()
+                Task::none()
             }
             BackupMessage::StartBackup(path) => {
                 // Open link with configured serial port
@@ -151,11 +153,11 @@ impl BackupTab {
                     rtxlink::link::Link::new(&port);
                     rtxlink::flow::backup(path, Some(&progress_tx));
                 });
-                Command::none()
+                Task::none()
             }
             BackupMessage::PortSelected(port) => {
                 self.serial_port = Some(port);
-                Command::none()
+                Task::none()
             }
             BackupMessage::Tick => {
                 if self.backup_in_progress {
@@ -175,9 +177,9 @@ impl BackupTab {
                         }
                     }
                 };
-                Command::none()
+                Task::none()
             }
-            _ => Command::none(),
+            _ => Task::none(),
         }
     }
 }
@@ -190,8 +192,8 @@ impl Tab for BackupTab {
     }
 
     fn tab_label(&self) -> TabLabel {
-        //TabLabel::Text(self.title())
-        TabLabel::IconText(Icon::CogAlt.into(), self.title())
+        TabLabel::Text(self.title())
+        // TabLabel::IconText(Icon::CogAlt.into(), self.title())
     }
 
     fn content(&self) -> Element<'_, Self::Message> {
@@ -217,25 +219,21 @@ impl Tab for BackupTab {
                 )
                 .push(row![Column::new()
                     .width(600)
-                    .align_items(Alignment::Center)
+                    .align_x(Alignment::Center)
                     .push(text(&self.status_text).size(20)),])
                 .push(row![progress_bar(0.0..=100.0, self.progress),].padding(20))
                 .push(
                     Row::new()
                         .spacing(20)
                         .push(
-                            Button::new(
-                                Text::new("Backup").horizontal_alignment(Horizontal::Center),
-                            )
-                            .width(Length::Fill)
-                            .on_press(BackupMessage::BackupPressed),
+                            Button::new(Text::new("Backup").align_x(Horizontal::Center))
+                                .width(Length::Fill)
+                                .on_press(BackupMessage::BackupPressed),
                         )
                         .push(
-                            Button::new(
-                                Text::new("Restore").horizontal_alignment(Horizontal::Center),
-                            )
-                            .width(Length::Fill)
-                            .on_press(BackupMessage::RestorePressed),
+                            Button::new(Text::new("Restore").align_x(Horizontal::Center))
+                                .width(Length::Fill)
+                                .on_press(BackupMessage::RestorePressed),
                         ),
                 ),
         )
