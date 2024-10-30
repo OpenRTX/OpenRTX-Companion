@@ -145,20 +145,20 @@ impl FlashTab {
             FlashMessage::Tick => {
                 if self.flash_in_progress {
                     if self.flash_progress.is_some() {
-                        let (transferred_bytes, total_bytes) =
-                            match self.flash_progress.as_ref().unwrap().try_iter().last() {
-                                Some(x) => x,
-                                None => {
-                                    self.status_text = String::from("Flashing complete!");
-                                    (100, 100)
-                                }
-                            };
-                        self.progress = transferred_bytes as f32 / total_bytes as f32 * 100.0;
-                        if transferred_bytes < total_bytes {
-                            self.status_text = String::from(format!(
-                                "Flashed chunk {transferred_bytes}/{total_bytes}"
-                            ));
-                        }
+                        match self.flash_progress.as_ref().unwrap().try_iter().last() {
+                            Some(x) => {
+                                let (transferred_bytes, total_bytes) = x;
+                                self.progress =
+                                    transferred_bytes as f32 / total_bytes as f32 * 100.0;
+                                self.status_text = String::from(format!(
+                                    "Flashed chunk {transferred_bytes}/{total_bytes}"
+                                ));
+                            }
+                            None => {
+                                self.status_text = String::from("");
+                                ()
+                            }
+                        };
                     }
                 };
                 Task::none()
