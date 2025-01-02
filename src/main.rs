@@ -90,7 +90,7 @@ enum TabId {
     #[default]
     Flash,
     Backup,
-    Files,
+    // Files,
 }
 
 #[derive(Default)]
@@ -138,8 +138,8 @@ impl OpenRTXCompanion {
                 Task::none()
             }
             Message::FilePath(path) => match &self.active_tab {
-                FlashTab => self.flash_tab.update(FlashMessage::FilePath(path)),
-                BackupTab => self.backup_tab.update(BackupMessage::FilePath(path)),
+                TabId::Flash => self.flash_tab.update(FlashMessage::FilePath(path)),
+                TabId::Backup => self.backup_tab.update(BackupMessage::FilePath(path)),
             },
             Message::StartBackup(path) => self.backup_tab.update(BackupMessage::StartBackup(path)),
             Message::Tick => {

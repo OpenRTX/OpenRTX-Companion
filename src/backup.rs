@@ -6,14 +6,12 @@ use crate::Tab;
 use iced::{
     alignment::{Horizontal, Vertical},
     widget::{combo_box, progress_bar, row, text, Button, Column, Container, Row, Text},
-    Alignment, Element, Font, Length, Padding, Task,
+    Alignment, Element, Length, Task,
 };
-use iced_aw::{TabLabel, Tabs};
+use iced_aw::TabLabel;
 use rfd::AsyncFileDialog;
 use serial_enumerator::get_serial_list;
 use std::sync::mpsc::{channel, Receiver};
-
-use crate::Icon;
 
 // Wrapper type for SerialItem to enable trait definition
 #[derive(Clone)]

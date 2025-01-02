@@ -4,16 +4,15 @@
 use iced::{
     alignment::{Horizontal, Vertical},
     widget::{combo_box, progress_bar, row, text, Button, Column, Container, Row, Text},
-    Alignment, Element, Font, Length, Padding, Task,
+    Alignment, Element, Length, Task,
 };
-use iced_aw::{TabLabel, Tabs};
-use image::{self, GenericImageView};
+use iced_aw::TabLabel;
 use rfd::AsyncFileDialog;
 use rtxflash::{flash, target};
 use std::sync::mpsc::{channel, Receiver};
-use tracing::debug;
+use std::thread::JoinHandle;
 
-use crate::{Icon, Message, Tab};
+use crate::{Message, Tab};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadioHW {
@@ -60,6 +59,7 @@ pub struct FlashTab {
     firmware_path: Option<String>,
     flash_in_progress: bool,
     flash_progress: Option<Receiver<(usize, usize)>>,
+    flash_thread: Option<JoinHandle<()>>,
     progress: f32,
     status_text: String,
 }
@@ -94,6 +94,7 @@ impl Default for FlashTab {
             firmware_path: None,
             flash_in_progress: false,
             flash_progress: None,
+            flash_thread: None,
             progress: 0.0,
             status_text: String::from("Select an action"),
         }
@@ -127,9 +128,9 @@ impl FlashTab {
                 // Start flash in a separate thread
                 let (progress_tx, progress_rx) = channel();
                 self.flash_progress = Some(progress_rx);
-                std::thread::spawn(move || {
+                self.flash_thread = Some(std::thread::spawn(move || {
                     let _ = flash::flash(target, port, bare_path, Some(&progress_tx));
-                });
+                }));
                 Task::none()
             }
             FlashMessage::FilePath(path) => {
@@ -144,23 +145,29 @@ impl FlashTab {
             }
             FlashMessage::Tick => {
                 if self.flash_in_progress {
-                    if self.flash_progress.is_some() {
-                        match self.flash_progress.as_ref().unwrap().try_iter().last() {
-                            Some(x) => {
-                                let (transferred_bytes, total_bytes) = x;
+                    if let Some(flash_progress) = &self.flash_progress {
+                        for m in flash_progress.try_iter() {
+                            let (transferred_bytes, total_bytes) = m;
+                            if transferred_bytes == total_bytes {
+                                // Error condition
+                                if transferred_bytes == 0 {
+                                    if let Some(flash_thread) = self.flash_thread.take() {
+                                        flash_thread.join().expect("Failed to join flash thread");
+                                    }
+                                } else {
+                                    // Success
+                                    self.status_text = String::from("Flashing complete!");
+                                    self.progress = 100.0;
+                                }
+                            } else {
                                 self.progress =
                                     transferred_bytes as f32 / total_bytes as f32 * 100.0;
-                                self.status_text = String::from(format!(
-                                    "Flashed chunk {transferred_bytes}/{total_bytes}"
-                                ));
+                                self.status_text =
+                                    format!("Flashed chunk {transferred_bytes}/{total_bytes}");
                             }
-                            None => {
-                                self.status_text = String::from("");
-                                ()
-                            }
-                        };
+                        }
                     }
-                };
+                }
                 Task::none()
             }
             _ => Task::none(),
