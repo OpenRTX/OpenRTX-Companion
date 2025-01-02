@@ -9,6 +9,7 @@ use iced::{
 use iced_aw::TabLabel;
 use rfd::AsyncFileDialog;
 use rtxflash::{flash, target};
+use std::io::Error;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread::JoinHandle;
 
@@ -59,7 +60,7 @@ pub struct FlashTab {
     firmware_path: Option<String>,
     flash_in_progress: bool,
     flash_progress: Option<Receiver<(usize, usize)>>,
-    flash_thread: Option<JoinHandle<()>>,
+    flash_thread: Option<JoinHandle<Result<(), Error>>>,
     progress: f32,
     status_text: String,
 }
@@ -129,7 +130,7 @@ impl FlashTab {
                 let (progress_tx, progress_rx) = channel();
                 self.flash_progress = Some(progress_rx);
                 self.flash_thread = Some(std::thread::spawn(move || {
-                    let _ = flash::flash(target, port, bare_path, Some(&progress_tx));
+                    flash::flash(target, port, bare_path, Some(&progress_tx))
                 }));
                 Task::none()
             }
@@ -152,7 +153,13 @@ impl FlashTab {
                                 // Error condition
                                 if transferred_bytes == 0 {
                                     if let Some(flash_thread) = self.flash_thread.take() {
-                                        flash_thread.join().expect("Failed to join flash thread");
+                                        let res = flash_thread
+                                            .join()
+                                            .expect("Failed to join flash thread");
+                                        match res {
+                                            Ok(_) => (),
+                                            Err(e) => self.status_text = e.to_string(),
+                                        }
                                     }
                                 } else {
                                     // Success
